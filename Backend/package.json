@@ -1,0 +1,1 @@
+{"name":"toolbox-pro-notes-api","version":"1.0.0","private":true,"engines":{"node":">=18"},"scripts":{"start":"node server.js"},"dependencies":{"cors":"^2.8.5","express":"^4.21.2","express-rate-limit":"^7.5.0","pdfkit":"^0.16.0"}}
