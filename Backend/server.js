@@ -6,6 +6,7 @@ const PDFDocument = require('pdfkit');
 const app = express();
 
 app.set('trust proxy', 1);
+
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '32kb' }));
 
@@ -22,11 +23,19 @@ const PORT = process.env.PORT || 3000;
 const KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/', (req, res) => {
+  res.send('ToolBox Pro Backend is running');
+});
+
+app.get('/health', (req, res) => {
+  res.json({ ok: true });
+});
 
 app.post('/api/generate-notes', async (req, res) => {
   if (!KEY) {
-    return res.status(503).json({ error: 'AI service is not configured.' });
+    return res.status(503).json({
+      error: 'AI service is not configured.'
+    });
   }
 
   const {
@@ -49,7 +58,9 @@ app.post('/api/generate-notes', async (req, res) => {
     notesType
   })) {
     if (typeof v !== 'string' || !v.trim() || v.length > 300) {
-      return res.status(400).json({ error: `Invalid ${k}.` });
+      return res.status(400).json({
+        error: `Invalid ${k}.`
+      });
     }
   }
 
@@ -131,7 +142,7 @@ app.post('/api/notes-pdf', async (req, res) => {
 
     const chunks = [];
 
-    doc.on('data', c => chunks.push(c));
+    doc.on('data', chunk => chunks.push(chunk));
 
     doc.on('end', () => {
       const pdf = Buffer.concat(chunks);
@@ -174,6 +185,6 @@ app.post('/api/notes-pdf', async (req, res) => {
   }
 });
 
-app.listen(PORT, () =>
-  console.log(`ToolBox Pro backend listening on ${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`ToolBox Pro backend listening on ${PORT}`);
+});
