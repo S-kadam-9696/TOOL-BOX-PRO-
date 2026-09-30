@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ToolBox Pro - Free Online Tools That Run in Your Browser</title>
+<meta name="description" content="ToolBox Pro is a collection of 67 free browser-based tools: calculators, text tools, developer utilities, image tools, QR codes and converters.">
+<!-- CANONICAL PLACEHOLDER: replace with your real site URL -->
+<link rel="canonical" href="https://s-kadam-9696.github.io/Tool-Box/">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ToolBox Pro - Free Online Tools">
+<meta property="og:description" content="Fast, simple and privacy-friendly online tools that work directly in your browser, plus secure AI study notes.">
+<meta property="og:url" content="https://s-kadam-9696.github.io/Tool-Box/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="ToolBox Pro - Free Online Tools">
+<meta name="twitter:description" content="Fast, simple and privacy-friendly online tools that work directly in your browser, plus secure AI study notes.">
+<script>document.documentElement.dataset.theme='dark';</script>
+<!-- Google AdSense -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3776846934936900" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top wrap">
+  <a class="brand" href="#home"><img src="assets/favicon.svg" alt="" width="30" height="30"><span>ToolBox Pro</span></a>
+  <nav id="main-nav" aria-label="Main">
+    <a href="#home"><span aria-hidden="true">⌂</span> Home</a>
+    <a href="#tools"><span aria-hidden="true">▦</span> All Tools</a>
+    <a href="#about"><span aria-hidden="true">ⓘ</span> About</a>
+    <a href="#privacy"><span aria-hidden="true">⌕</span> Privacy</a>
+    <a href="#terms"><span aria-hidden="true">§</span> Terms</a>
+    <a href="#contact"><span aria-hidden="true">✉</span> Contact</a>
+  </nav>
+  <button id="theme" class="icon-btn" type="button" aria-label="Dark mode" hidden>●</button>
+  <button id="menu-toggle" class="icon-btn menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-nav">☰</button>
+</header>
+<main id="main">
+<section class="hero wrap" id="home">
+  <span class="hero-kicker">67 tools • browser-based</span><h1>Everything You Need, <span>In One Place.</span></h1>
+  <p class="sub">Powerful online tools. Fast, private, and free.</p>
+  <p class="lead">Fast, simple and privacy-friendly online tools that work directly in your browser, plus secure AI study notes.</p>
+  <div class="hero-pills" aria-label="Highlights"><span>⚡ Instant</span><span>🔒 Private</span><span>📱 Mobile-ready</span></div>
+  <form class="search" role="search" onsubmit="return false">
+    <label class="sr" for="q">Search tools</label>
+    <input id="q" type="search" placeholder="Search tools..." autocomplete="off">
+  </form>
+</section>
+<section class="wrap about-card" id="about" aria-labelledby="about-h">
+  <div class="about-head">
+    <div class="about-avatar" aria-hidden="true">S</div>
+    <div>
+      <p class="eyebrow">About ToolBox Pro</p>
+      <h2 id="about-h">Created by Soham ❤️</h2>
+      <p class="about-sub">A simple, fast and privacy-friendly collection of 67 useful browser tools.</p>
+    </div>
+  </div>
+  <div class="about-grid">
+    <article class="about-item"><span class="about-icon" aria-hidden="true">🧰</span><div><h3>67 Useful Tools</h3><p>Calculators, text tools, developer utilities, image tools, QR and converters in one place.</p></div></article>
+    <article class="about-item"><span class="about-icon" aria-hidden="true">⚡</span><div><h3>Fast & Browser-Based</h3><p>Most tools run directly on your device with no backend required.</p></div></article>
+    <article class="about-item"><span class="about-icon" aria-hidden="true">🔒</span><div><h3>Privacy First</h3><p>Your text and local image processing stay in your browser whenever the tool supports it.</p></div></article>
+    <article class="about-item"><span class="about-icon" aria-hidden="true">📱</span><div><h3>Made for Mobile</h3><p>Responsive layout, touch-friendly controls and dark/light mode for comfortable use.</p></div></article>
+  </div>
+  <div class="about-note"><strong>Developer:</strong> Soham &nbsp;•&nbsp; <strong>Platform:</strong> GitHub Pages &nbsp;•&nbsp; <strong>Backend:</strong> Optional secure AI notes API</div>
+  <div class="about-actions"><a class="btn" href="#tools">Explore all 67 tools</a><a class="btn ghost" href="#contact">Contact</a></div>
+</section>
+<aside class="ad wrap" aria-label="Advertisement">
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-3776846934936900"
+     data-ad-slot="8855628320"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</aside>
+<section class="wrap" id="tools" aria-labelledby="tools-h">
+  <h2 id="tools-h" class="sr">All tools</h2>
+  <div class="chips" id="chips" role="group" aria-label="Tool categories"></div>
+  <p id="count" class="note" role="status" aria-live="polite"></p>
+  <div id="favs-sec" hidden><h3 class="row-h">Favorites</h3><div class="grid" id="favs"></div></div>
+  <div id="recent-sec" hidden><h3 class="row-h">Recently used</h3><div class="grid" id="recent"></div></div>
+  <h3 class="row-h" id="all-h">All tools</h3>
+  <div class="grid" id="grid"></div>
+  <p id="empty" class="empty" hidden>No tools found</p>
+</section>
+<aside class="ad wrap" aria-label="Advertisement">
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-3776846934936900"
+     data-ad-slot="8855628320"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</aside>
+<section class="wrap panel" id="privacy" aria-labelledby="privacy-h">
+  <h2 id="privacy-h">Privacy</h2>
+  <p>Your files are processed directly in your browser whenever possible. Files used by the image tools are not uploaded to our server. ToolBox Pro does not collect personal data and does not include analytics.</p>
+  <p>Only your theme, favorite tool IDs and recently used tool IDs are stored in your browser's local storage. Nothing else is saved.</p>
+</section>
+<section class="wrap legal" aria-label="Legal information">
+  <article id="privacy-policy"><h2>Privacy Policy</h2><p>ToolBox Pro runs in your browser. Text, files and images you enter into a tool are processed on your device and are not sent to us. We store no accounts and no personal data. Your browser keeps a theme choice, favorite tool IDs and recent tool IDs in local storage; you can clear them at any time in your browser settings. If advertising is enabled, ad providers such as Google may use cookies under their own policies.</p></article>
+  <article id="terms"><h2>Terms of Use</h2><p>ToolBox Pro is provided free of charge and "as is". You are responsible for how you use the results and for having the right to process the files you use. Do not use the tools for unlawful purposes.</p></article>
+  <article id="disclaimer"><h2>Disclaimer</h2><p>Results are provided for general information. BMI, CGPA and percentage conversions are estimates and are not medical, academic or financial advice. Always verify important results independently.</p></article>
+  <article id="contact"><h2>Contact</h2><p>Project support: <a href="https://github.com/S-kadam-9696/Tool-Box/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a></p></article>
+</section>
+<aside class="ad wrap" aria-label="Advertisement">
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-3776846934936900"
+     data-ad-slot="8855628320"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</aside>
+</main>
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div><strong>ToolBox Pro</strong><p>Free browser-based tools for everyday tasks.</p></div>
+    <nav aria-label="Footer"><a href="#home">Home</a><a href="#tools">All Tools</a><a href="#about">About</a><a href="#privacy-policy">Privacy Policy</a><a href="#terms">Terms</a><a href="#disclaimer">Disclaimer</a><a href="#contact">Contact</a></nav>
+  </div>
+  <p class="wrap made">Created by Soham ❤️</p>
+</footer>
+<dialog id="dlg" aria-labelledby="dlg-title" aria-describedby="dlg-desc">
+  <div class="dlg-in">
+    <header class="dlg-h"><div><h2 id="dlg-title" tabindex="-1"></h2><p id="dlg-desc" class="note"></p></div>
+    <button id="dlg-close" class="icon-btn" type="button" aria-label="Close tool">✕</button></header>
+    <div class="ad-wrap tool-ad" aria-label="Advertisement">
+      <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-3776846934936900" data-ad-slot="8855628320" data-ad-format="auto" data-full-width-responsive="true"></ins>
+    </div>
+    <div id="dlg-body" class="dlg-b"></div>
+    <div class="ad-wrap tool-ad" aria-label="Advertisement">
+      <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-3776846934936900" data-ad-slot="8855628320" data-ad-format="auto" data-full-width-responsive="true"></ins>
+    </div>
+  </div>
+</dialog>
+<div id="toasts" aria-live="polite"></div>
+<script>window.addEventListener('load',()=>{try{document.querySelectorAll('.tool-ad .adsbygoogle').forEach(()=>{(adsbygoogle=window.adsbygoogle||[]).push({})})}catch(e){}});</script>
+<script src="app.js"></script>
+</body>
+</html>

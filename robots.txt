@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://s-kadam-9696.github.io/Tool-Box/sitemap.xml
