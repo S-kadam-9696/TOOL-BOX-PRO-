@@ -1,6 +1,6 @@
 'use strict';
 /* ToolBox Pro - browser tools + optional secure AI backend. */
-const DEFAULT_API_BASE = 'https://YOUR-RENDER-SERVICE.onrender.com';
+const DEFAULT_API_BASE = 'https://tool-box-pro.onrender.com';
 const getApiBase = () => { const saved = store.get('tbp:api', ''); return (saved || DEFAULT_API_BASE).replace(/\/$/, ''); };
 const $ = (s, r = document) => r.querySelector(s);
 const h = (tag, p = {}, ...kids) => {
