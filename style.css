@@ -163,3 +163,31 @@ dialog{animation:softPop .22s ease both}dialog::backdrop{background:rgba(3,8,15,
 }
 
 .palette{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-top:14px}.swatch{min-height:74px;border:1px solid var(--ln);border-radius:12px;background:var(--sw);color:#fff;text-shadow:0 1px 3px #0008;font:700 .82rem ui-monospace,monospace;cursor:pointer;transition:transform .15s,filter .15s}.swatch:hover{transform:translateY(-2px);filter:brightness(1.08)}
+[data-theme=light]{
+  --bg:#F1F5F9;
+  --sf:#FFFFFF;
+  --ink:#111827;
+  --mut:#5B6472;
+  --ln:#D7DEE8;
+  --ac:#245BDB;
+  --ac2:#FFFFFF;
+  --acs:#E8EFFF;
+  --ok:#138A5B;
+  --er:#C93B2C;
+  --sh:0 1px 2px rgba(15,23,42,.08),0 10px 28px -14px rgba(15,23,42,.16);
+  color-scheme:light;
+}
+
+.brand-logo{
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  border-radius:10px;
+  display:block;
+}
+
+#theme{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
