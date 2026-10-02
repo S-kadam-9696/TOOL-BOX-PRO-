@@ -2,14 +2,13 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const PDFDocument = require('pdfkit');
-const fs = require('fs');
 
 const app = express();
 
 app.set('trust proxy', 1);
 
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: '64kb' }));
+app.use(express.json({ limit: '32kb' }));
 
 app.use(
   rateLimit({
@@ -23,35 +22,8 @@ app.use(
 const PORT = process.env.PORT || 3000;
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
-
-/* -------------------------------------------------------
-   FONT
-------------------------------------------------------- */
-
-const FONT_CANDIDATES = [
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-  '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf'
-];
-
-const BOLD_FONT_CANDIDATES = [
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-  '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf'
-];
-
-const FONT =
-  FONT_CANDIDATES.find(fs.existsSync) || null;
-
-const BOLD_FONT =
-  BOLD_FONT_CANDIDATES.find(fs.existsSync) || FONT;
-
-if (!FONT) {
-  console.warn('Unicode font not found. PDF may have limited character support.');
-}
-
-/* -------------------------------------------------------
-   BASIC ROUTES
-------------------------------------------------------- */
+const GROQ_MODEL =
+  process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
 app.get('/', (req, res) => {
   res.send('ToolBox Pro Backend is running');
@@ -61,9 +33,10 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
-/* -------------------------------------------------------
+
+/* =========================
    AI STUDY NOTES
-------------------------------------------------------- */
+========================= */
 
 app.post('/api/generate-notes', async (req, res) => {
   if (!GROQ_API_KEY) {
@@ -82,7 +55,7 @@ app.post('/api/generate-notes', async (req, res) => {
     notesType
   } = req.body || {};
 
-  for (const [key, value] of Object.entries({
+  for (const [k, v] of Object.entries({
     course,
     year,
     university,
@@ -92,37 +65,27 @@ app.post('/api/generate-notes', async (req, res) => {
     notesType
   })) {
     if (
-      typeof value !== 'string' ||
-      !value.trim() ||
-      value.length > 300
+      typeof v !== 'string' ||
+      !v.trim() ||
+      v.length > 300
     ) {
       return res.status(400).json({
-        error: `Invalid ${key}.`
+        error: `Invalid ${k}.`
       });
     }
   }
 
   const prompt = `
-Create high-quality, accurate, exam-oriented study notes.
+Create accurate, exam-oriented study notes in ${language}.
 
-Student details:
 Course: ${course}
-Year / Semester: ${year}
+Year/Semester: ${year}
 University: ${university}
 Subject: ${subject}
 Topic: ${topic}
-Language: ${language}
 Notes Type: ${notesType}
 
-IMPORTANT:
-- Make the notes detailed but easy to study.
-- Use clear headings and subheadings.
-- Use simple student-friendly language.
-- Do not invent official university material.
-- If exact syllabus information is uncertain, clearly say it is general study material.
-- Keep terminology academically appropriate.
-
-Use this structure:
+Use this exact structure:
 
 # ${topic}
 
@@ -130,37 +93,38 @@ Use this structure:
 Give a clear introduction.
 
 ## 2. Important Definitions
-Give important definitions in simple exam-friendly language.
+Give important exam-friendly definitions.
 
 ## 3. Key Concepts
-Explain the main concepts point-by-point.
+Explain the main concepts clearly.
 
 ## 4. Detailed Explanation
-Explain the topic properly with examples wherever useful.
+Explain the topic in an organized way.
 
 ## 5. Important Exam Points
-List high-value points students should remember.
+Give points students should remember.
 
 ## 6. Examples
-Give practical or numerical examples where relevant.
+Give relevant examples where useful.
 
 ## 7. Important Questions with Short Answers
-Give around 8-10 likely questions with concise answers.
+Give important exam questions with concise answers.
 
 ## 8. Long Answer Questions
-Give around 5 important long-answer questions and points that should be covered.
+Give important long-answer questions and answer guidance.
 
 ## 9. Quick Revision
-Give a compact revision checklist.
+Give a short revision checklist.
 
 ## 10. Exam Tip
-Give a useful final exam-oriented tip.
+Give one useful exam-oriented tip.
 
-Return only the study notes.
+Do not claim that the notes are officially issued by the university.
+If exact syllabus details are uncertain, clearly state that the material is general study material.
 `;
 
   try {
-    const response = await fetch(
+    const r = await fetch(
       'https://api.groq.com/openai/v1/chat/completions',
       {
         method: 'POST',
@@ -174,7 +138,7 @@ Return only the study notes.
             {
               role: 'system',
               content:
-                'You are an expert educational study-notes assistant. Produce accurate, structured, exam-oriented notes.'
+                'You are an educational study-notes assistant. Give accurate, well-structured and exam-oriented notes.'
             },
             {
               role: 'user',
@@ -187,10 +151,10 @@ Return only the study notes.
       }
     );
 
-    const data = await response.json();
+    const data = await r.json();
 
-    if (!response.ok) {
-      console.error('Groq API error:', data);
+    if (!r.ok) {
+      console.error('Groq error:', data);
 
       return res.status(502).json({
         error: 'AI provider request failed.'
@@ -198,7 +162,7 @@ Return only the study notes.
     }
 
     const notes =
-      data?.choices?.[0]?.message?.content?.trim() || '';
+      data?.choices?.[0]?.message?.content || '';
 
     if (!notes) {
       return res.status(502).json({
@@ -207,8 +171,9 @@ Return only the study notes.
     }
 
     res.json({ notes });
-  } catch (error) {
-    console.error('Groq request error:', error);
+
+  } catch (err) {
+    console.error('Groq request error:', err);
 
     res.status(502).json({
       error: 'Unable to reach AI provider.'
@@ -216,342 +181,72 @@ Return only the study notes.
   }
 });
 
-/* -------------------------------------------------------
-   PREMIUM PDF HELPERS
-------------------------------------------------------- */
 
-function cleanText(text) {
+/* =========================
+   SAFE PDF TEXT
+========================= */
+
+function cleanPdfText(text) {
   return String(text || '')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\u00a0/g, ' ')
-    .trim();
+
+    // Currency
+    .replace(/₹/g, 'Rs. ')
+
+    // Smart punctuation
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/…/g, '...')
+
+    // Bullets / special symbols
+    .replace(/•/g, '-')
+    .replace(/✓/g, '[OK]')
+    .replace(/☑/g, '[OK]')
+    .replace(/→/g, '->')
+    .replace(/←/g, '<-')
+    .replace(/≤/g, '<=')
+    .replace(/≥/g, '>=')
+    .replace(/×/g, 'x')
+    .replace(/÷/g, '/')
+
+    // Remove problematic invisible characters
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 }
 
-function stripMarkdown(text) {
-  return String(text || '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/`(.*?)`/g, '$1')
-    .replace(/^\s*>\s?/, '')
-    .trim();
-}
 
-function drawPageNumber(doc) {
-  const page = doc.page;
-  const text = `Page ${page}`;
+/* =========================
+   PDF HELPERS
+========================= */
 
-  doc
-    .save()
-    .font(FONT || 'Helvetica')
-    .fontSize(8)
-    .fillColor('#777777')
-    .text(
-      text,
-      48,
-      doc.page.height - 30,
-      {
-        width: doc.page.width - 96,
-        align: 'center'
-      }
-    )
-    .restore();
-}
+function addPageNumber(doc) {
+  const range = doc.bufferedPageRange();
+  const pageCount = range.count;
 
-function setupFonts(doc) {
-  if (FONT) {
-    doc.registerFont('TBP-Regular', FONT);
-  }
-
-  if (BOLD_FONT) {
-    doc.registerFont('TBP-Bold', BOLD_FONT);
-  }
-
-  doc.font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica');
-}
-
-function drawHeader(doc, title) {
-  doc
-    .save()
-    .roundedRect(42, 36, doc.page.width - 84, 72, 12)
-    .fill('#111827');
-
-  doc
-    .fillColor('#ffffff')
-    .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-    .fontSize(21)
-    .text(title, 60, 55, {
-      width: doc.page.width - 120,
-      align: 'center'
-    });
-
-  doc.restore();
-
-  doc.moveDown(1.5);
-}
-
-function drawInfoBox(doc, course, year, university, language) {
-  const y = doc.y;
-
-  doc
-    .save()
-    .roundedRect(48, y, doc.page.width - 96, 70, 10)
-    .fill('#f3f4f6');
-
-  doc
-    .fillColor('#374151')
-    .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-    .fontSize(9)
-    .text('COURSE', 64, y + 13);
-
-  doc
-    .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-    .fontSize(9)
-    .text('YEAR / SEMESTER', 205, y + 13);
-
-  doc
-    .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-    .fontSize(9)
-    .text('LANGUAGE', 390, y + 13);
-
-  doc
-    .fillColor('#111827')
-    .font(FONT ? 'TBP-Regular' : 'Helvetica')
-    .fontSize(10)
-    .text(course, 64, y + 29, { width: 125 });
-
-  doc
-    .text(year, 205, y + 29, { width: 160 });
-
-  doc
-    .text(language, 390, y + 29, { width: 100 });
-
-  doc
-    .fillColor('#6b7280')
-    .fontSize(8)
-    .text(university, 64, y + 50, {
-      width: doc.page.width - 128
-    });
-
-  doc.restore();
-
-  doc.y = y + 88;
-}
-
-function ensureSpace(doc, needed = 70) {
-  if (doc.y > doc.page.height - needed) {
-    doc.addPage();
-  }
-}
-
-function renderNotes(doc, notes) {
-  const lines = cleanText(notes).split('\n');
-
-  for (let rawLine of lines) {
-    let line = rawLine.trim();
-
-    if (!line) {
-      doc.moveDown(0.45);
-      continue;
-    }
-
-    /* Main heading */
-    if (/^#\s+/.test(line)) {
-      ensureSpace(doc, 80);
-
-      const heading = stripMarkdown(
-        line.replace(/^#\s+/, '')
-      );
-
-      doc
-        .fillColor('#111827')
-        .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-        .fontSize(18)
-        .text(heading, {
-          paragraphGap: 8
-        });
-
-      doc
-        .moveDown(0.15);
-
-      continue;
-    }
-
-    /* Section heading */
-    if (/^##\s+/.test(line)) {
-      ensureSpace(doc, 65);
-
-      const heading = stripMarkdown(
-        line.replace(/^##\s+/, '')
-      );
-
-      doc
-        .fillColor('#1f2937')
-        .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-        .fontSize(14)
-        .text(heading, {
-          paragraphGap: 6
-        });
-
-      doc.moveDown(0.15);
-
-      continue;
-    }
-
-    /* Subheading */
-    if (/^###\s+/.test(line)) {
-      ensureSpace(doc, 55);
-
-      const heading = stripMarkdown(
-        line.replace(/^###\s+/, '')
-      );
-
-      doc
-        .fillColor('#374151')
-        .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-        .fontSize(11.5)
-        .text(heading);
-
-      doc.moveDown(0.1);
-
-      continue;
-    }
-
-    /* Bullet */
-    if (/^[-*•]\s+/.test(line)) {
-      ensureSpace(doc, 35);
-
-      const bullet = stripMarkdown(
-        line.replace(/^[-*•]\s+/, '')
-      );
-
-      const x = doc.x;
-
-      doc
-        .fillColor('#111827')
-        .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-        .fontSize(9)
-        .text('•', x, doc.y);
-
-      doc
-        .font(FONT ? 'TBP-Regular' : 'Helvetica')
-        .fontSize(9.5)
-        .fillColor('#374151')
-        .text(bullet, x + 14, doc.y - 10, {
-          width: doc.page.width - x - 70,
-          lineGap: 3
-        });
-
-      doc.moveDown(0.15);
-
-      continue;
-    }
-
-    /* Numbered list */
-    if (/^\d+\.\s+/.test(line)) {
-      ensureSpace(doc, 35);
-
-      const match = line.match(/^(\d+)\.\s+(.*)$/);
-      const number = match[1];
-      const content = stripMarkdown(match[2]);
-
-      const x = doc.x;
-
-      doc
-        .fillColor('#111827')
-        .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-        .fontSize(9.5)
-        .text(`${number}.`, x, doc.y);
-
-      doc
-        .font(FONT ? 'TBP-Regular' : 'Helvetica')
-        .fontSize(9.5)
-        .fillColor('#374151')
-        .text(content, x + 20, doc.y - 11, {
-          width: doc.page.width - x - 76,
-          lineGap: 3
-        });
-
-      doc.moveDown(0.15);
-
-      continue;
-    }
-
-    /* Markdown table separator */
-    if (/^\|?[\s:-]+\|[\s|:-]*$/.test(line)) {
-      continue;
-    }
-
-    /* Table row */
-    if (line.includes('|')) {
-      ensureSpace(doc, 35);
-
-      const cells = line
-        .split('|')
-        .map(x => stripMarkdown(x))
-        .filter(Boolean);
-
-      const available = doc.page.width - 96;
-      const colWidth = available / Math.max(cells.length, 1);
-
-      const startX = 48;
-      const startY = doc.y;
-
-      doc
-        .save()
-        .fillColor('#f3f4f6')
-        .rect(
-          startX,
-          startY - 2,
-          available,
-          22
-        )
-        .fill();
-
-      cells.forEach((cell, index) => {
-        doc
-          .fillColor('#374151')
-          .font(FONT ? 'TBP-Regular' : 'Helvetica')
-          .fontSize(8)
-          .text(
-            cell,
-            startX + index * colWidth + 5,
-            startY + 4,
-            {
-              width: colWidth - 10,
-              height: 30
-            }
-          );
-      });
-
-      doc.restore();
-
-      doc.y = startY + 25;
-
-      continue;
-    }
-
-    /* Normal paragraph */
-    ensureSpace(doc, 40);
-
-    const paragraph = stripMarkdown(line);
+  for (let i = 0; i < pageCount; i++) {
+    doc.switchToPage(i);
 
     doc
-      .fillColor('#374151')
-      .font(FONT ? 'TBP-Regular' : 'Helvetica')
-      .fontSize(9.5)
-      .text(paragraph, {
-        width: doc.page.width - 96,
-        lineGap: 4,
-        paragraphGap: 6
-      });
+      .font('Helvetica')
+      .fontSize(8)
+      .fillColor('#777')
+      .text(
+        `ToolBox Pro  •  Page ${i + 1} of ${pageCount}`,
+        50,
+        800,
+        {
+          width: 495,
+          align: 'center'
+        }
+      );
   }
 }
 
-/* -------------------------------------------------------
-   PREMIUM NOTES PDF
-------------------------------------------------------- */
+
+/* =========================
+   PDF GENERATION
+========================= */
 
 app.post('/api/notes-pdf', async (req, res) => {
   const {
@@ -565,107 +260,35 @@ app.post('/api/notes-pdf', async (req, res) => {
 
   if (
     [title, course, year, university, language, notes].some(
-      value =>
-        typeof value !== 'string' ||
-        !value.trim()
-    ) ||
-    notes.length > 50000
+      v => typeof v !== 'string' || !v.trim()
+    )
   ) {
     return res.status(400).json({
       error: 'Invalid PDF data.'
     });
   }
 
+  if (notes.length > 50000) {
+    return res.status(400).json({
+      error: 'Notes are too large.'
+    });
+  }
+
   try {
     const doc = new PDFDocument({
       size: 'A4',
-      margins: {
-        top: 48,
-        bottom: 48,
-        left: 48,
-        right: 48
-      },
+      margin: 50,
       bufferPages: true,
       info: {
         Title: title,
         Author: 'ToolBox Pro',
-        Subject: 'AI Study Notes',
-        Creator: 'ToolBox Pro'
+        Subject: 'AI Study Notes'
       }
     });
 
     const chunks = [];
 
-    doc.on('data', chunk => {
-      chunks.push(chunk);
-    });
-
-    doc.on('error', error => {
-      console.error('PDF error:', error);
-    });
-
-    setupFonts(doc);
-
-    /* Cover/header */
-    drawHeader(doc, 'ToolBox Pro — Study Notes');
-
-    doc
-      .fillColor('#111827')
-      .font(BOLD_FONT ? 'TBP-Bold' : 'Helvetica-Bold')
-      .fontSize(17)
-      .text(title, {
-        align: 'center'
-      });
-
-    doc.moveDown(0.7);
-
-    drawInfoBox(
-      doc,
-      course,
-      year,
-      university,
-      language
-    );
-
-    doc
-      .fillColor('#6b7280')
-      .font(FONT ? 'TBP-Regular' : 'Helvetica')
-      .fontSize(8.5)
-      .text(
-        'General study material generated with AI. Verify syllabus-specific requirements with your university/course outline.',
-        {
-          align: 'center',
-          lineGap: 3
-        }
-      );
-
-    doc.moveDown(1);
-
-    /* Divider */
-    doc
-      .moveTo(48, doc.y)
-      .lineTo(doc.page.width - 48, doc.y)
-      .lineWidth(1)
-      .strokeColor('#d1d5db')
-      .stroke();
-
-    doc.moveDown(0.8);
-
-    renderNotes(doc, notes);
-
-    /* Add page numbers */
-    const range = doc.bufferedPageRange();
-
-    for (
-      let i = range.start;
-      i < range.start + range.count;
-      i++
-    ) {
-      doc.switchToPage(i);
-      drawPageNumber(doc);
-    }
-
-    doc.end();
+    doc.on('data', chunk => chunks.push(chunk));
 
     doc.on('end', () => {
       const pdf = Buffer.concat(chunks);
@@ -680,18 +303,220 @@ app.post('/api/notes-pdf', async (req, res) => {
 
       res.end(pdf);
     });
-  } catch (error) {
-    console.error('PDF generation failed:', error);
 
-    res.status(500).json({
-      error: 'PDF generation failed.'
-    });
+    /* ---------- HEADER ---------- */
+
+    doc
+      .fillColor('#111827')
+      .font('Helvetica-Bold')
+      .fontSize(22)
+      .text(cleanPdfText(title), {
+        align: 'center',
+        width: 495
+      });
+
+    doc.moveDown(0.7);
+
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .fillColor('#555')
+      .text(
+        cleanPdfText(
+          `${course} | ${year} | ${university} | ${language}`
+        ),
+        {
+          align: 'center',
+          width: 495
+        }
+      );
+
+    doc.moveDown(1);
+
+    /* ---------- INFO BOX ---------- */
+
+    const boxTop = doc.y;
+
+    doc
+      .roundedRect(50, boxTop, 495, 58, 8)
+      .fill('#f3f4f6');
+
+    doc
+      .fillColor('#111827')
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .text('Study Material', 65, boxTop + 12);
+
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor('#555')
+      .text(
+        'AI-generated general study material. Verify syllabus-specific requirements with your university/course outline.',
+        65,
+        boxTop + 28,
+        {
+          width: 465,
+          lineGap: 2
+        }
+      );
+
+    doc.y = boxTop + 78;
+
+    /* ---------- NOTES ---------- */
+
+    const cleanNotes = cleanPdfText(notes);
+
+    const lines = cleanNotes.split('\n');
+
+    for (let rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (!line) {
+        doc.moveDown(0.45);
+        continue;
+      }
+
+      /* H1 */
+      if (line.startsWith('# ')) {
+        const text = line.replace(/^#\s+/, '');
+
+        doc
+          .moveDown(0.7)
+          .fillColor('#111827')
+          .font('Helvetica-Bold')
+          .fontSize(18)
+          .text(text, {
+            width: 495,
+            lineGap: 4
+          });
+
+        doc.moveDown(0.25);
+        continue;
+      }
+
+      /* H2 */
+      if (line.startsWith('## ')) {
+        const text = line.replace(/^##\s+/, '');
+
+        doc
+          .moveDown(0.55)
+          .fillColor('#1f2937')
+          .font('Helvetica-Bold')
+          .fontSize(14)
+          .text(text, {
+            width: 495,
+            lineGap: 3
+          });
+
+        doc.moveDown(0.15);
+        continue;
+      }
+
+      /* H3 */
+      if (line.startsWith('### ')) {
+        const text = line.replace(/^###\s+/, '');
+
+        doc
+          .moveDown(0.4)
+          .fillColor('#374151')
+          .font('Helvetica-Bold')
+          .fontSize(11.5)
+          .text(text, {
+            width: 495,
+            lineGap: 3
+          });
+
+        continue;
+      }
+
+      /* Numbered list */
+      if (/^\d+\.\s+/.test(line)) {
+        doc
+          .fillColor('#111827')
+          .font('Helvetica')
+          .fontSize(10.5)
+          .text(line, {
+            width: 495,
+            lineGap: 4,
+            paragraphGap: 3
+          });
+
+        continue;
+      }
+
+      /* Bullet */
+      if (/^[-*]\s+/.test(line)) {
+        const text = line.replace(/^[-*]\s+/, '');
+
+        doc
+          .fillColor('#111827')
+          .font('Helvetica')
+          .fontSize(10.5)
+          .text(`- ${text}`, {
+            width: 495,
+            lineGap: 4,
+            paragraphGap: 2
+          });
+
+        continue;
+      }
+
+      /* Normal paragraph */
+      doc
+        .fillColor('#111827')
+        .font('Helvetica')
+        .fontSize(10.5)
+        .text(line, {
+          width: 495,
+          lineGap: 4,
+          paragraphGap: 4
+        });
+    }
+
+    /* ---------- FOOTER ---------- */
+
+    doc.moveDown(1);
+
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .fillColor('#111827')
+      .text('ToolBox Pro', {
+        align: 'center',
+        width: 495
+      });
+
+    doc
+      .font('Helvetica')
+      .fontSize(8)
+      .fillColor('#777')
+      .text('Created by Soham', {
+        align: 'center',
+        width: 495
+      });
+
+    /* ---------- PAGE NUMBERS ---------- */
+
+    addPageNumber(doc);
+
+    doc.end();
+
+  } catch (err) {
+    console.error('PDF error:', err);
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'PDF generation failed.'
+      });
+    }
   }
 });
 
-/* -------------------------------------------------------
+
+/* =========================
    START SERVER
-------------------------------------------------------- */
+========================= */
 
 app.listen(PORT, () => {
   console.log(
