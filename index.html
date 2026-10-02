@@ -28,7 +28,15 @@
 }
 </script>
 
-<script>document.documentElement.dataset.theme='dark';</script>
+<script>
+try {
+  const savedTheme = localStorage.getItem('tbp:theme');
+  document.documentElement.dataset.theme =
+    savedTheme === 'light' || savedTheme === '"light"' ? 'light' : 'dark';
+} catch(e) {
+  document.documentElement.dataset.theme = 'dark';
+}
+</script>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3776846934936900" crossorigin="anonymous"></script>
 
@@ -40,8 +48,14 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top wrap">
+
   <a class="brand" href="#home">
-    <img src="assets/favicon.svg" alt="" width="30" height="30">
+    <img
+      class="brand-logo"
+      src="assets/favicon.svg"
+      alt="ToolBox Pro logo"
+      width="40"
+      height="40">
     <span>ToolBox Pro</span>
   </a>
 
@@ -54,18 +68,41 @@
     <a href="#contact"><span aria-hidden="true">✉</span> Contact</a>
   </nav>
 
-  <button id="theme" class="icon-btn" type="button" aria-label="Dark mode" hidden>●</button>
+  <button
+    id="theme"
+    class="icon-btn"
+    type="button"
+    aria-label="Switch theme"
+    title="Switch theme">
+    ☀
+  </button>
 
-  <button id="menu-toggle" class="icon-btn menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="main-nav">☰</button>
+  <button
+    id="menu-toggle"
+    class="icon-btn menu-toggle"
+    type="button"
+    aria-label="Open navigation"
+    aria-expanded="false"
+    aria-controls="main-nav">
+    ☰
+  </button>
+
 </header>
 
 <main id="main">
 
 <section class="hero wrap" id="home">
+
   <span class="hero-kicker">67 tools • browser-based</span>
+
   <h1>Everything You Need, <span>In One Place.</span></h1>
+
   <p class="sub">Powerful online tools. Fast, private, and free.</p>
-  <p class="lead">Fast, simple and privacy-friendly online tools that work directly in your browser, plus secure AI study notes.</p>
+
+  <p class="lead">
+    Fast, simple and privacy-friendly online tools that work directly in your browser,
+    plus secure AI study notes.
+  </p>
 
   <div class="hero-pills" aria-label="Highlights">
     <span>⚡ Instant</span>
@@ -75,19 +112,44 @@
 
   <form class="search" role="search" onsubmit="return false">
     <label class="sr" for="q">Search tools</label>
-    <input id="q" type="search" placeholder="Search tools..." autocomplete="off">
+    <input
+      id="q"
+      type="search"
+      placeholder="Search tools..."
+      autocomplete="off">
   </form>
+
 </section>
+
+<!-- HOME AD 1 -->
+<aside class="ad wrap" aria-label="Advertisement">
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-3776846934936900"
+       data-ad-slot="8855628320"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
+</aside>
 
 <section class="wrap about-card" id="about" aria-labelledby="about-h">
 
   <div class="about-head">
+
     <div class="about-avatar" aria-hidden="true">S</div>
+
     <div>
       <p class="eyebrow">About ToolBox Pro</p>
+
       <h2 id="about-h">About ToolBox Pro</h2>
-      <p class="about-sub">A simple, fast and privacy-friendly collection of 67 useful browser tools.</p>
+
+      <p class="about-sub">
+        A simple, fast and privacy-friendly collection of 67 useful browser tools.
+      </p>
     </div>
+
   </div>
 
   <div class="about-grid">
@@ -96,7 +158,9 @@
       <span class="about-icon" aria-hidden="true">🧰</span>
       <div>
         <h3>67 Useful Tools</h3>
-        <p>Calculators, text tools, developer utilities, image tools, QR and converters in one place.</p>
+        <p>
+          Calculators, text tools, developer utilities, image tools, QR and converters in one place.
+        </p>
       </div>
     </article>
 
@@ -104,7 +168,9 @@
       <span class="about-icon" aria-hidden="true">⚡</span>
       <div>
         <h3>Fast & Browser-Based</h3>
-        <p>Most tools run directly on your device with no backend required.</p>
+        <p>
+          Most tools run directly on your device with no backend required.
+        </p>
       </div>
     </article>
 
@@ -112,7 +178,9 @@
       <span class="about-icon" aria-hidden="true">🔒</span>
       <div>
         <h3>Privacy First</h3>
-        <p>Your text and local image processing stay in your browser whenever the tool supports it.</p>
+        <p>
+          Your text and local image processing stay in your browser whenever the tool supports it.
+        </p>
       </div>
     </article>
 
@@ -120,7 +188,9 @@
       <span class="about-icon" aria-hidden="true">📱</span>
       <div>
         <h3>Made for Mobile</h3>
-        <p>Responsive layout, touch-friendly controls and dark/light mode for comfortable use.</p>
+        <p>
+          Responsive layout, touch-friendly controls and dark/light mode for comfortable use.
+        </p>
       </div>
     </article>
 
@@ -139,23 +209,36 @@
 
 </section>
 
+<!-- HOME AD 2 -->
 <aside class="ad wrap" aria-label="Advertisement">
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-client="ca-pub-3776846934936900"
-     data-ad-slot="8855628320"
-     data-ad-format="auto"
-     data-full-width-responsive="true"></ins>
-<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-3776846934936900"
+       data-ad-slot="8855628320"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
 </aside>
 
 <section class="wrap" id="tools" aria-labelledby="tools-h">
 
   <h2 id="tools-h" class="sr">All tools</h2>
 
-  <div class="chips" id="chips" role="group" aria-label="Tool categories"></div>
+  <div
+    class="chips"
+    id="chips"
+    role="group"
+    aria-label="Tool categories">
+  </div>
 
-  <p id="count" class="note" role="status" aria-live="polite"></p>
+  <p
+    id="count"
+    class="note"
+    role="status"
+    aria-live="polite">
+  </p>
 
   <div id="favs-sec" hidden>
     <h3 class="row-h">Favorites</h3>
@@ -175,23 +258,33 @@
 
 </section>
 
+<!-- HOME AD 3 -->
 <aside class="ad wrap" aria-label="Advertisement">
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-client="ca-pub-3776846934936900"
-     data-ad-slot="8855628320"
-     data-ad-format="auto"
-     data-full-width-responsive="true"></ins>
-<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-3776846934936900"
+       data-ad-slot="8855628320"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
 </aside>
 
 <section class="wrap panel" id="privacy" aria-labelledby="privacy-h">
 
   <h2 id="privacy-h">Privacy</h2>
 
-  <p>Your files are processed directly in your browser whenever possible. Files used by the image tools are not uploaded to our server. ToolBox Pro does not collect personal data and does not include analytics.</p>
+  <p>
+    Your files are processed directly in your browser whenever possible.
+    Files used by the image tools are not uploaded to our server.
+    ToolBox Pro does not collect personal data and does not include analytics.
+  </p>
 
-  <p>Only your theme, favorite tool IDs and recently used tool IDs are stored in your browser's local storage. Nothing else is saved.</p>
+  <p>
+    Only your theme, favorite tool IDs and recently used tool IDs are stored
+    in your browser's local storage. Nothing else is saved.
+  </p>
 
 </section>
 
@@ -199,36 +292,65 @@
 
   <article id="privacy-policy">
     <h2>Privacy Policy</h2>
-    <p>ToolBox Pro runs in your browser. Text, files and images you enter into a tool are processed on your device and are not sent to us. We store no accounts and no personal data. Your browser keeps a theme choice, favorite tool IDs and recent tool IDs in local storage; you can clear them at any time in your browser settings. If advertising is enabled, ad providers such as Google may use cookies under their own policies.</p>
+
+    <p>
+      ToolBox Pro runs in your browser. Text, files and images you enter into
+      a tool are processed on your device and are not sent to us.
+      We store no accounts and no personal data.
+      Your browser keeps a theme choice, favorite tool IDs and recent tool IDs
+      in local storage; you can clear them at any time in your browser settings.
+      If advertising is enabled, ad providers such as Google may use cookies
+      under their own policies.
+    </p>
   </article>
 
   <article id="terms">
     <h2>Terms of Use</h2>
-    <p>ToolBox Pro is provided free of charge and "as is". You are responsible for how you use the results and for having the right to process the files you use. Do not use the tools for unlawful purposes.</p>
+
+    <p>
+      ToolBox Pro is provided free of charge and "as is".
+      You are responsible for how you use the results and for having the right
+      to process the files you use. Do not use the tools for unlawful purposes.
+    </p>
   </article>
 
   <article id="disclaimer">
     <h2>Disclaimer</h2>
-    <p>Results are provided for general information. BMI, CGPA and percentage conversions are estimates and are not medical, academic or financial advice. Always verify important results independently.</p>
+
+    <p>
+      Results are provided for general information.
+      BMI, CGPA and percentage conversions are estimates and are not medical,
+      academic or financial advice. Always verify important results independently.
+    </p>
   </article>
 
   <article id="contact">
     <h2>Contact</h2>
-    <p>Project support:
-      <a href="https://github.com/S-kadam-9696/Tool-Box/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+
+    <p>
+      Project support:
+      <a
+        href="https://github.com/S-kadam-9696/Tool-Box/issues"
+        target="_blank"
+        rel="noopener noreferrer">
+        GitHub Issues
+      </a>
     </p>
   </article>
 
 </section>
 
+<!-- HOME AD 4 -->
 <aside class="ad wrap" aria-label="Advertisement">
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-client="ca-pub-3776846934936900"
-     data-ad-slot="8855628320"
-     data-ad-format="auto"
-     data-full-width-responsive="true"></ins>
-<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-3776846934936900"
+       data-ad-slot="8855628320"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
 </aside>
 
 </main>
@@ -236,6 +358,7 @@
 <footer class="foot">
 
   <div class="wrap foot-in">
+
     <div>
       <strong>ToolBox Pro</strong>
       <p>Free browser-based tools for everyday tasks.</p>
@@ -250,13 +373,17 @@
       <a href="#disclaimer">Disclaimer</a>
       <a href="#contact">Contact</a>
     </nav>
+
   </div>
 
   <p class="wrap made">Created by Soham ❤️</p>
 
 </footer>
 
-<dialog id="dlg" aria-labelledby="dlg-title" aria-describedby="dlg-desc">
+<dialog
+  id="dlg"
+  aria-labelledby="dlg-title"
+  aria-describedby="dlg-desc">
 
   <div class="dlg-in">
 
@@ -267,28 +394,40 @@
         <p id="dlg-desc" class="note"></p>
       </div>
 
-      <button id="dlg-close" class="icon-btn" type="button" aria-label="Close tool">✕</button>
+      <button
+        id="dlg-close"
+        class="icon-btn"
+        type="button"
+        aria-label="Close tool">
+        ✕
+      </button>
 
     </header>
 
+    <!-- TOOL AD 1 -->
     <div class="ad-wrap tool-ad" aria-label="Advertisement">
+
       <ins class="adsbygoogle"
            style="display:block"
            data-ad-client="ca-pub-3776846934936900"
            data-ad-slot="8855628320"
            data-ad-format="auto"
            data-full-width-responsive="true"></ins>
+
     </div>
 
     <div id="dlg-body" class="dlg-b"></div>
 
+    <!-- TOOL AD 2 -->
     <div class="ad-wrap tool-ad" aria-label="Advertisement">
+
       <ins class="adsbygoogle"
            style="display:block"
            data-ad-client="ca-pub-3776846934936900"
            data-ad-slot="8855628320"
            data-ad-format="auto"
            data-full-width-responsive="true"></ins>
+
     </div>
 
   </div>
@@ -298,12 +437,12 @@
 <div id="toasts" aria-live="polite"></div>
 
 <script>
-window.addEventListener('load',()=>{
-  try{
-    document.querySelectorAll('.tool-ad .adsbygoogle').forEach(()=>{
-      (adsbygoogle=window.adsbygoogle||[]).push({})
-    })
-  }catch(e){}
+window.addEventListener('load', () => {
+  try {
+    document.querySelectorAll('.tool-ad .adsbygoogle').forEach(() => {
+      (adsbygoogle = window.adsbygoogle || []).push({});
+    });
+  } catch(e) {}
 });
 </script>
 
