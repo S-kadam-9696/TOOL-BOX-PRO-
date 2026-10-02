@@ -20,8 +20,9 @@ app.use(
 );
 
 const PORT = process.env.PORT || 3000;
-const KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
 app.get('/', (req, res) => {
   res.send('ToolBox Pro Backend is running');
@@ -32,7 +33,7 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/api/generate-notes', async (req, res) => {
-  if (!KEY) {
+  if (!GROQ_API_KEY) {
     return res.status(503).json({
       error: 'AI service is not configured.'
     });
@@ -64,40 +65,67 @@ app.post('/api/generate-notes', async (req, res) => {
     }
   }
 
-  const prompt = `Create accurate exam-oriented study notes in ${language}. Course: ${course}. Year/Semester: ${year}. University: ${university}. Subject: ${subject}. Topic: ${topic}. Type: ${notesType}. Include overview, definitions, key concepts, explanation, important exam points, examples where relevant, important questions with short answers, and quick revision. Do not claim the notes are officially issued by the university. If syllabus details are uncertain, state that they are general study material.`;
+  const prompt = `
+Create accurate, exam-oriented study notes in ${language}.
+
+Course: ${course}
+Year/Semester: ${year}
+University: ${university}
+Subject: ${subject}
+Topic: ${topic}
+Notes Type: ${notesType}
+
+Include:
+1. Overview
+2. Important definitions
+3. Key concepts
+4. Detailed explanation
+5. Important exam points
+6. Examples where relevant
+7. Important questions with short answers
+8. Long-answer questions
+9. Quick revision points
+
+Make the notes clear, structured and useful for students.
+Do not claim that the notes are officially issued by the university.
+If exact syllabus details are uncertain, clearly state that the material is general study material.
+`;
 
   try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        MODEL
-      )}:generateContent?key=${encodeURIComponent(KEY)}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ]
-        })
-      }
-    );
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an educational study-notes assistant. Give accurate, well-structured and exam-oriented notes.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.4,
+        max_tokens: 12000
+      })
+    });
 
     const data = await r.json();
 
     if (!r.ok) {
+      console.error('Groq error:', data);
       return res.status(502).json({
         error: 'AI provider request failed.'
       });
     }
 
-    const notes =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(p => p.text || '')
-        .join('') || '';
+    const notes = data?.choices?.[0]?.message?.content || '';
 
     if (!notes) {
       return res.status(502).json({
@@ -106,7 +134,9 @@ app.post('/api/generate-notes', async (req, res) => {
     }
 
     res.json({ notes });
-  } catch {
+  } catch (err) {
+    console.error('Groq request error:', err);
+
     res.status(502).json({
       error: 'Unable to reach AI provider.'
     });
@@ -178,7 +208,9 @@ app.post('/api/notes-pdf', async (req, res) => {
       .text(notes, { lineGap: 3 });
 
     doc.end();
-  } catch {
+  } catch (err) {
+    console.error('PDF error:', err);
+
     res.status(500).json({
       error: 'PDF generation failed.'
     });
