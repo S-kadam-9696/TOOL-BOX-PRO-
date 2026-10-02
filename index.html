@@ -276,9 +276,10 @@ try {
   <h2 id="privacy-h">Privacy</h2>
 
   <p>
-    Your files are processed directly in your browser whenever possible.
-    Files used by the image tools are not uploaded to our server.
-    ToolBox Pro does not collect personal data and does not include analytics.
+    Browser-only tools process text, files and images locally whenever possible.
+    Image processing is performed in your browser and is not uploaded by ToolBox Pro.
+    AI Study Notes send the fields you submit to the ToolBox Pro backend so the Groq model can generate notes.
+    ToolBox Pro does not add analytics.
   </p>
 
   <p>
@@ -294,9 +295,9 @@ try {
     <h2>Privacy Policy</h2>
 
     <p>
-      ToolBox Pro runs in your browser. Text, files and images you enter into
-      a tool are processed on your device and are not sent to us.
-      We store no accounts and no personal data.
+      ToolBox Pro runs browser tools locally whenever possible. Text, files and images used by those browser-only tools are processed on your device and are not uploaded by ToolBox Pro.
+      AI Study Notes are different: the fields you submit and the generated-note request are sent to the ToolBox Pro backend for processing by the configured Groq model.
+      We store no accounts and do not add analytics.
       Your browser keeps a theme choice, favorite tool IDs and recent tool IDs
       in local storage; you can clear them at any time in your browser settings.
       If advertising is enabled, ad providers such as Google may use cookies
@@ -409,6 +410,7 @@ try {
 
       <ins class="adsbygoogle"
            style="display:block"
+           data-tbp-ad="tool"
            data-ad-client="ca-pub-3776846934936900"
            data-ad-slot="8855628320"
            data-ad-format="auto"
@@ -423,6 +425,7 @@ try {
 
       <ins class="adsbygoogle"
            style="display:block"
+           data-tbp-ad="tool"
            data-ad-client="ca-pub-3776846934936900"
            data-ad-slot="8855628320"
            data-ad-format="auto"
@@ -435,16 +438,6 @@ try {
 </dialog>
 
 <div id="toasts" aria-live="polite"></div>
-
-<script>
-window.addEventListener('load', () => {
-  try {
-    document.querySelectorAll('.tool-ad .adsbygoogle').forEach(() => {
-      (adsbygoogle = window.adsbygoogle || []).push({});
-    });
-  } catch(e) {}
-});
-</script>
 
 <script src="app.js"></script>
 

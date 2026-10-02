@@ -53,6 +53,10 @@ let urls = [];
 const mkUrl = b => { const u = URL.createObjectURL(b); urls.push(u); return u; };
 const revUrl = u => { if (u) { URL.revokeObjectURL(u); urls = urls.filter(x => x !== u); } };
 const revokeAll = () => { urls.forEach(u => URL.revokeObjectURL(u)); urls = []; };
+/* cleanup callbacks (timers etc.) run whenever a tool closes or another opens */
+let cleanups = [];
+const onClose = fn => cleanups.push(fn);
+const runCleanups = () => { const c = cleanups; cleanups = []; c.forEach(f => { try { f(); } catch { /* ignore */ } }); };
 
 /* ---------- ui helpers ---------- */
 const field = (label, ctl) => h('label', { class: 'f' }, typeof label === 'string' ? h('span', {}, label) : label, ctl);
@@ -166,6 +170,64 @@ const wordTool = el => liveCount(el, ['Words', 'Characters', 'Characters without
 const charTool = el => liveCount(el, ['Characters', 'Characters without spaces', 'Words', 'Lines']);
 const SMALL = new Set('a an and as at but by for in nor of on or per the to vs via'.split(' '));
 const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+function caseTransformTool(el, mode) {
+  const t = area({ rows: 9 }), o = area({ rows: 9, readonly: true });
+  const titleCase = s => s.toLowerCase().replace(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu, (w, i, src) => {
+    const before = src.slice(0, i);
+    const wordIndex = (before.match(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu) || []).length;
+    const small = SMALL.has(w.toLowerCase());
+    return wordIndex > 0 && small ? w.toLowerCase() : cap(w);
+  });
+  const apply = transform => {
+    if (!t.value) { toast('Please enter some text', 'err'); return; }
+    o.value = transform(t.value);
+  };
+  const controls = mode === 'title'
+    ? [btn('Convert to Title Case', () => apply(titleCase), 'pri')]
+    : [btn('Uppercase', () => apply(s => s.toUpperCase()), 'pri'), btn('Lowercase', () => apply(s => s.toLowerCase()))];
+  el.append(field('Your text', t), h('div', { class: 'acts' }, ...controls), field('Result', o),
+    h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-result.txt'), btn('Clear', () => { t.value = ''; o.value = ''; t.focus(); }, 'ghost')));
+}
+
+function jsonValidatorTool(el) {
+  const t = area({ rows: 12, placeholder: '{"example":true}' }), m = msgEl();
+  const run = () => {
+    if (!t.value.trim()) { m.set('Please enter JSON to validate.'); return; }
+    try { JSON.parse(t.value); m.set('Valid JSON.', true); toast('Valid JSON'); }
+    catch (e) { m.set('Invalid JSON: ' + e.message); toast('Invalid JSON', 'err'); }
+  };
+  el.append(field('JSON input', t), h('div', { class: 'acts' }, btn('Validate JSON', run, 'pri'), btn('Clear', () => { t.value = ''; m.set(''); }, 'ghost')), m);
+}
+
+function textExtractorTool(el) {
+  const t = area({ rows: 10 }), mode = sel([
+    ['emails', 'Email addresses'], ['urls', 'URLs'], ['numbers', 'Numbers'],
+    ['hashtags', 'Hashtags'], ['mentions', 'Mentions'], ['lines', 'Non-empty lines']
+  ]), o = area({ rows: 10, readonly: true });
+  const run = () => {
+    const s = t.value;
+    let values = [];
+    if (mode.value === 'emails') values = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+    else if (mode.value === 'urls') values = s.match(/https?:\/\/[^\s<>'"]+/gi) || [];
+    else if (mode.value === 'numbers') values = s.match(/[-+]?\d+(?:\.\d+)?/g) || [];
+    else if (mode.value === 'hashtags') values = s.match(/#[\p{L}\p{N}_]+/gu) || [];
+    else if (mode.value === 'mentions') values = s.match(/@[A-Za-z0-9_]+/g) || [];
+    else values = s.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    values = [...new Set(values)];
+    o.value = values.join('\n');
+    toast(values.length ? `Extracted ${values.length} item(s)` : 'Nothing found');
+  };
+  el.append(field('Text', t), field('Extract', mode), btn('Extract', run, 'pri'), field('Result', o),
+    h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-extracted.txt'), btn('Clear', () => { t.value = ''; o.value = ''; })));
+}
+
+function jpgToPngTool(el) {
+  imgTool(el, { name: 'jpg-to-png', go: 'Convert JPG to PNG', fixed: 'png', check: f => f.type === 'image/jpeg' ? '' : 'Please select a JPG image.' });
+}
+function pngToJpgTool(el) {
+  imgTool(el, { name: 'png-to-jpg', go: 'Convert PNG to JPG', fixed: 'jpeg', q: true, check: f => f.type === 'image/png' ? '' : 'Please select a PNG image.' });
+}
+
 function caseTool(el) {
   const t = area({ rows: 9 });
   const ops = [['UPPERCASE', s => s.toUpperCase()], ['lowercase', s => s.toLowerCase()],
@@ -473,20 +535,20 @@ function pwTool(el) {
 function simpleCalc(el, title, fields, calc) {
   const controls = fields.map(([label, type='number', placeholder='']) => field(label, inp({type, placeholder, step:type==='number'?'any':undefined})));
   const out=h('div',{class:'big','aria-live':'polite'}), m=msgEl();
-  const run=()=>{try{out.textContent=calc(controls.map(x=>x.querySelector('input,textarea,select')))}catch{m.set('Please check your inputs.')}};
+  const run=()=>{m.set('');out.textContent='';try{const r=String(calc(controls.map(x=>x.querySelector('input,textarea,select'))));if(/NaN|Infinity/.test(r))throw 0;out.textContent=r}catch{m.set('Please check your inputs.')}};
   el.append(h('p',{class:'note'},title),h('div',{class:'two'},...controls),btn('Calculate',run,'pri'),m,out);
 }
 function bcomAggTool(el){simpleCalc(el,'Enter total marks from all semesters/subjects.',[['Marks obtained'],['Maximum marks']],x=>{const a=+x[0].value,b=+x[1].value;if(!(b>0)||a<0||a>b)throw 0;return `Aggregate Percentage: ${(a/b*100).toFixed(2)}%`;});}
 function sgpaTool(el){const rows=h('div',{class:'rows'}),out=h('div',{class:'big'}),m=msgEl();let n=0;const add=()=>{n++;rows.append(h('div',{class:'row'},num({placeholder:'Grade points'}),num({placeholder:'Credits'}),btn('Remove',e=>e.currentTarget.parentElement.remove(),'ghost')))};add();add();const run=()=>{let p=0,c=0;for(const r of rows.children){const i=r.querySelectorAll('input');const g=+i[0].value,cr=+i[1].value;if(!(g>=0&&cr>0))throw 0;p+=g*cr;c+=cr}out.textContent=`SGPA: ${(p/c).toFixed(2)}`};el.append(h('p',{class:'note'},'Add each subject grade point and credit.'),rows,h('div',{class:'acts'},btn('Add subject',add),btn('Calculate',()=>{try{run();m.set('')}catch{m.set('Enter valid grade points and credits.')}} ,'pri')),m,out)}
-function marksGradeTool(el){simpleCalc(el,'Convert marks into a percentage and common grade.',[['Marks'],['Maximum marks']],x=>{let p=+x[0].value/+x[1].value*100;if(!Number.isFinite(p)||p<0)throw 0;let g=p>=90?'A+':p>=80?'A':p>=70?'B':p>=60?'C':p>=50?'D':p>=40?'E':'F';return `${p.toFixed(2)}% — Grade ${g}`})}
+function marksGradeTool(el){simpleCalc(el,'Convert marks into a percentage and common grade.',[['Marks'],['Maximum marks']],x=>{if(x.some(i=>i.value===''))throw 0;let p=+x[0].value/+x[1].value*100;if(!Number.isFinite(p)||p<0||p>100)throw 0;let g=p>=90?'A+':p>=80?'A':p>=70?'B':p>=60?'C':p>=50?'D':p>=40?'E':'F';return `${p.toFixed(2)}% — Grade ${g}`})}
 function gstTool(el){simpleCalc(el,'Calculate GST inclusive/exclusive amounts.',[['Amount'],['GST rate %']],x=>{let a=+x[0].value,r=+x[1].value,g=a*r/100;return `GST: ${g.toFixed(2)}\nTotal: ${(a+g).toFixed(2)}`})}
 function emiTool(el){simpleCalc(el,'Monthly EMI using reducing-balance formula.',[['Loan amount'],['Annual interest %'],['Months']],x=>{let P=+x[0].value,r=+x[1].value/1200,n=+x[2].value;if(!(P>0&&n>0))throw 0;let e=r?P*r*(1+r)**n/((1+r)**n-1):P/n;return `Monthly EMI: ${e.toFixed(2)}`})}
 function interestTool(el){simpleCalc(el,'Simple interest calculator.',[['Principal'],['Annual rate %'],['Years']],x=>{let p=+x[0].value,r=+x[1].value,y=+x[2].value;return `Interest: ${(p*r*y/100).toFixed(2)}\nAmount: ${(p+p*r*y/100).toFixed(2)}`})}
 function compoundTool(el){simpleCalc(el,'Compound interest calculator.',[['Principal'],['Annual rate %'],['Years'],['Compounds per year']],x=>{let p=+x[0].value,r=+x[1].value/100,n=+x[3].value,y=+x[2].value;if(!(p>0&&n>0))throw 0;let a=p*(1+r/n)**(n*y);return `Amount: ${a.toFixed(2)}\nInterest: ${(a-p).toFixed(2)}`})}
-function profitTool(el){simpleCalc(el,'Profit or loss from cost and selling price.',[['Cost price'],['Selling price']],x=>{let c=+x[0].value,s=+x[1].value,d=s-c;return d>=0?`Profit: ${d.toFixed(2)} (${(d/c*100).toFixed(2)}%)`:`Loss: ${(-d).toFixed(2)} (${(-d/c*100).toFixed(2)}%)`})}
-function ratioTool(el){simpleCalc(el,'Simplify a ratio.',[['First value'],['Second value']],x=>{let a=+x[0].value,b=+x[1].value,g=(m,n)=>n?g(n,m%n):Math.abs(m);let d=g(a,b);return `${a/d}:${b/d}`})}
+function profitTool(el){simpleCalc(el,'Profit or loss from cost and selling price.',[['Cost price'],['Selling price']],x=>{let c=+x[0].value,s=+x[1].value;if(!(c>0)||!Number.isFinite(s))throw 0;const d=s-c;return d>=0?`Profit: ${d.toFixed(2)} (${(d/c*100).toFixed(2)}%)`:`Loss: ${(-d).toFixed(2)} (${(-d/c*100).toFixed(2)}%)`})}
+function ratioTool(el){simpleCalc(el,'Simplify a ratio.',[['First value'],['Second value']],x=>{let a=+x[0].value,b=+x[1].value;if(!Number.isFinite(a)||!Number.isFinite(b)||(!a&&!b))throw 0;const g=(m,n)=>n?g(n,m%n):Math.abs(m);const d=g(a,b);return `${a/d}:${b/d}`})}
 function averageTool(el){const a=area({placeholder:'10, 20, 30'}),o=h('div',{class:'big'});el.append(field('Numbers separated by commas',a),btn('Calculate',()=>{let v=a.value.split(',').map(Number).filter(Number.isFinite);o.textContent=v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(2):'Enter numbers'},'pri'),o)}
-function fractionTool(el){simpleCalc(el,'Add two fractions.',[['Numerator 1'],['Denominator 1'],['Numerator 2'],['Denominator 2']],x=>{let a=+x[0].value,b=+x[1].value,c=+x[2].value,d=+x[3].value,n=a*d+c*b,den=b*d;let g=(m,k)=>k?g(k,m%k):Math.abs(m);let z=g(n,den);return `${n/z}/${den/z}`})}
+function fractionTool(el){simpleCalc(el,'Add two fractions.',[['Numerator 1'],['Denominator 1'],['Numerator 2'],['Denominator 2']],x=>{let a=+x[0].value,b=+x[1].value,c=+x[2].value,d=+x[3].value;if(!Number.isFinite(a)||!Number.isFinite(b)||!Number.isFinite(c)||!Number.isFinite(d)||!b||!d)throw 0;let n=a*d+c*b,den=b*d;const g=(m,k)=>k?g(k,m%k):Math.abs(m);let z=g(n,den);return `${n/z}/${den/z}`})}
 function reverseTool(el){const a=area(),o=h('div',{class:'result'});el.append(field('Text',a),btn('Reverse',()=>o.textContent=[...a.value].reverse().join(''),'pri'),o)}
 function whitespaceTool(el){const a=area(),o=h('div',{class:'result'});el.append(field('Text',a),btn('Clean whitespace',()=>o.textContent=a.value.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim(),'pri'),o)}
 function lineCountTool(el){const a=area(),o=h('div',{class:'big'});el.append(field('Text',a),btn('Count',()=>o.textContent=`Lines: ${a.value?a.value.split(/\r?\n/).length:0}`,'pri'),o)}
@@ -495,7 +557,12 @@ function findReplaceTool(el){const a=area(),f=inp(),r=inp(),o=area({readonly:tru
 function slugTool(el){const a=inp(),o=h('div',{class:'result'});el.append(field('Title',a),btn('Create slug',()=>o.textContent=a.value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-'),'pri'),o)}
 function emailsTool(el){const a=area(),o=area({readonly:true});el.append(field('Text',a),btn('Extract emails',()=>o.value=[...new Set(a.value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)||[])].join('\n'),'pri'),o)}
 function urlsTool(el){const a=area(),o=area({readonly:true});el.append(field('Text',a),btn('Extract URLs',()=>o.value=[...new Set(a.value.match(/https?:\/\/[^\s<]+/gi)||[])].join('\n'),'pri'),o)}
-function htmlEncodeTool(el){const a=area(),o=area({readonly:true});el.append(field('HTML/text',a),btn('Encode HTML',()=>o.value=a.value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'),'pri'),o)}
+function htmlEncodeTool(el){
+  const a=area(),o=area({readonly:true}),mode=sel([['e','Encode'],['d','Decode']]),m=msgEl();
+  const ENC=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const DEC=s=>{const t=document.createElement('textarea');t.innerHTML=s.replace(/</g,'&lt;');return t.value};
+  el.append(field('Mode',mode),field('HTML or text',a),btn('Convert',()=>{m.set('');if(!a.value){o.value='';m.set('Please enter some input.');return}o.value=mode.value==='e'?ENC(a.value):DEC(a.value);m.set('Done.',true)},'pri'),m,field('Output',o),h('div',{class:'acts'},copyBtn(()=>o.value),dlBtn(()=>o.value,'toolbox-pro-result.txt')));
+}
 function regexTool(el){const p=inp(),s=area(),o=h('div',{class:'result'});el.append(field('Regex',p),field('Test text',s),btn('Test',()=>{try{o.textContent=new RegExp(p.value).test(s.value)?'Match found.':'No match.'}catch{o.textContent='Invalid regular expression.'}},'pri'),o)}
 function jwtTool(el){const a=area(),o=area({readonly:true});el.append(field('JWT',a),btn('Decode payload',()=>{try{const x=a.value.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');o.value=JSON.stringify(JSON.parse(atob(x)),null,2)}catch{o.value='Invalid JWT payload.'}},'pri'),o)}
 function urlParseTool(el){const a=inp(),o=area({readonly:true});el.append(field('URL',a),btn('Parse',()=>{try{let u=new URL(a.value);o.value=`Protocol: ${u.protocol}\nHost: ${u.host}\nPath: ${u.pathname}\nQuery: ${u.search}\nHash: ${u.hash}`}catch{o.value='Invalid URL.'}},'pri'),o)}
@@ -503,26 +570,41 @@ function timestampTool(el){simpleCalc(el,'Convert Unix timestamp to local date.'
 function randomTool(el){simpleCalc(el,'Generate a random integer in an inclusive range.',[['Minimum'],['Maximum']],x=>{let a=+x[0].value,b=+x[1].value;if(b<a)throw 0;return String(Math.floor(Math.random()*(b-a+1))+a)})}
 function numberWordsTool(el){const a=num(),o=h('div',{class:'result'});function w(n){const u=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'],t=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];if(n<20)return u[n];if(n<100)return t[Math.floor(n/10)]+(n%10?'-'+u[n%10]:'');if(n<1000)return u[Math.floor(n/100)]+' hundred'+(n%100?' '+w(n%100):'');if(n<1e6)return w(Math.floor(n/1000))+' thousand'+(n%1000?' '+w(n%1000):'');if(n<1e9)return w(Math.floor(n/1e6))+' million'+(n%1e6?' '+w(n%1e6):'');return 'Number too large';}el.append(field('Integer',a),btn('Convert',()=>{let n=+a.value;o.textContent=Number.isInteger(n)&&n>=0?w(n):'Enter a positive integer.'},'pri'),o)}
 function dateDiffTool(el){const a=inp({type:'date'}),b=inp({type:'date'}),o=h('div',{class:'big'});el.append(h('div',{class:'two'},field('Start',a),field('End',b)),btn('Calculate',()=>{let d=Math.abs(new Date(b.value)-new Date(a.value));o.textContent=a.value&&b.value?`${Math.ceil(d/86400000)} day(s)`:'Select both dates'},'pri'),o)}
-function dateAddTool(el){const a=inp({type:'date'}),b=num(),o=h('div',{class:'big'});el.append(field('Date',a),field('Days (+/-)',b),btn('Calculate',()=>{let d=new Date(a.value);d.setDate(d.getDate()+ +b.value);o.textContent=isNaN(d)?'Select a date':d.toISOString().slice(0,10)},'pri'),o)}
+function dateAddTool(el){const a=inp({type:'date'}),b=num(),o=h('div',{class:'big','aria-live':'polite'});el.append(field('Date',a),field('Days (+/-)',b),btn('Calculate',()=>{if(!a.value){o.textContent='Select a date';return}const d=new Date(a.value+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+(+b.value||0));o.textContent=isNaN(d)?'Select a date':d.toISOString().slice(0,10)},'pri'),o)}
 function bmiTool2(el){simpleCalc(el,'BMI = weight / height².',[['Weight kg'],['Height cm']],x=>{let w=+x[0].value,h=+x[1].value/100;if(!(w>0&&h>0))throw 0;let b=w/(h*h);return `BMI: ${b.toFixed(2)} — ${b<18.5?'Underweight':b<25?'Normal':b<30?'Overweight':'Obesity'}`})}
-function examCountdownTool(el){const a=inp({type:'date'}),o=h('div',{class:'big'});el.append(field('Exam date',a),btn('Calculate',()=>{let d=new Date(a.value),n=new Date();n.setHours(0,0,0,0);o.textContent=a.value?`${Math.ceil((d-n)/86400000)} day(s) remaining`:'Select a date'},'pri'),o)}
+function examCountdownTool(el){const a=inp({type:'date'}),o=h('div',{class:'big','aria-live':'polite'});el.append(field('Exam date',a),btn('Calculate',()=>{if(!a.value){o.textContent='Select a date';return}const d=new Date(a.value+'T00:00:00'),n=new Date();n.setHours(0,0,0,0);const k=Math.round((d-n)/86400000);o.textContent=k<0?'This exam date has already passed.':k===0?'The exam is today. Good luck!':`${k} day(s) remaining`},'pri'),o)}
 function studyTimeTool(el){simpleCalc(el,'Plan total study time.',[['Topics'],['Minutes per topic'],['Break minutes']],x=>{let t=(+x[0].value||0)*((+x[1].value||0)+(+x[2].value||0));return `${t} minutes (${(t/60).toFixed(1)} hours)`})}
 function textCompareTool(el){const a=area(),b=area(),o=h('div',{class:'result'});el.append(field('Text A',a),field('Text B',b),btn('Compare',()=>{o.textContent=a.value===b.value?'Identical':`Different — length difference ${Math.abs(a.value.length-b.value.length)}`},'pri'),o)}
 function csvJsonTool(el){const a=area(),o=area({readonly:true});el.append(field('CSV (first row headers)',a),btn('Convert',()=>{let lines=a.value.trim().split(/\r?\n/);if(!lines.length){o.value='';return}let h=lines.shift().split(',').map(x=>x.trim());o.value=JSON.stringify(lines.map(l=>{let v=l.split(',');return Object.fromEntries(h.map((k,i)=>[k,(v[i]||'').trim()]))}),null,2)},'pri'),o)}
 function jsonCsvTool(el){const a=area(),o=area({readonly:true});el.append(field('JSON array',a),btn('Convert',()=>{try{let x=JSON.parse(a.value);if(!Array.isArray(x))throw 0;let h=[...new Set(x.flatMap(o=>Object.keys(o)))];o.value=[h.join(','),...x.map(r=>h.map(k=>JSON.stringify(r[k]??'')).join(','))].join('\n')}catch{o.value='Expected a JSON array of objects.'}},'pri'),o)}
 function contrastTool(el){const a=inp({type:'color',value:'#ffffff'}),b=inp({type:'color',value:'#000000'}),o=h('div',{class:'big'});function lum(h){let c=h.value.match(/[\da-f]{2}/gi).map(x=>parseInt(x,16)/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2]}el.append(h('div',{class:'two'},field('Foreground',a),field('Background',b)),btn('Check',()=>{let x=lum(a),y=lum(b),r=(Math.max(x,y)+.05)/(Math.min(x,y)+.05);o.textContent=`Contrast: ${r.toFixed(2)}:1 — ${r>=4.5?'AA pass for normal text':'Below AA normal-text ratio'}`},'pri'),o)}
-function stopwatchTool(el){const o=h('div',{class:'big'},'00:00.000');let start=0,elapsed=0,timer=null;const tick=()=>o.textContent=((elapsed+(start?Date.now()-start:0))/1000).toFixed(3)+' sec';el.append(o,h('div',{class:'acts'},btn('Start',()=>{if(!timer){start=Date.now();timer=setInterval(tick,50)}} ,'pri'),btn('Stop',()=>{if(timer){elapsed+=Date.now()-start;clearInterval(timer);timer=null;start=0;tick()}}),btn('Reset',()=>{clearInterval(timer);timer=null;start=0;elapsed=0;tick()})))}
+function stopwatchTool(el){
+  const o=h('div',{class:'big'},'00:00.000');let start=0,elapsed=0,timer=null;
+  const p2=v=>String(v).padStart(2,'0');
+  const fmtT=ms=>{const t=Math.floor(ms),hh=Math.floor(t/3600000),mm=Math.floor(t/60000)%60,ss=Math.floor(t/1000)%60;return (hh?hh+':':'')+p2(mm)+':'+p2(ss)+'.'+String(t%1000).padStart(3,'0')};
+  const tick=()=>{o.textContent=fmtT(elapsed+(start?Date.now()-start:0))};
+  onClose(()=>{clearInterval(timer);timer=null});
+  el.append(o,h('div',{class:'acts'},
+    btn('Start',()=>{if(!timer){start=Date.now();timer=setInterval(tick,50)}},'pri'),
+    btn('Stop',()=>{if(timer){elapsed+=Date.now()-start;clearInterval(timer);timer=null;start=0;tick()}}),
+    btn('Reset',()=>{clearInterval(timer);timer=null;start=0;elapsed=0;tick()})));
+}
 function countdownTool(el){
-  const a=inp({type:'datetime-local'}),o=h('div',{class:'big'}); let t;
-  const start=()=>{
-    clearInterval(t);
-    t=setInterval(()=>{
-      const d=new Date(a.value)-new Date();
-      if(d<=0){o.textContent='Time reached.';clearInterval(t);return;}
-      o.textContent=`${Math.floor(d/86400000)}d ${Math.floor(d/3600000)%24}h ${Math.floor(d/60000)%60}m ${Math.floor(d/1000)%60}s`;
-    },250);
+  const a=inp({type:'datetime-local'}),o=h('div',{class:'big','aria-live':'off'}),m=msgEl(); let t=null;
+  const stop=()=>{clearInterval(t);t=null};
+  const tick=()=>{
+    const d=new Date(a.value)-new Date();
+    if(d<=0){o.textContent='Time reached.';stop();return;}
+    o.textContent=`${Math.floor(d/86400000)}d ${Math.floor(d/3600000)%24}h ${Math.floor(d/60000)%60}m ${Math.floor(d/1000)%60}s`;
   };
-  el.append(field('Target',a),btn('Start',start,'pri'),o);
+  const start=()=>{
+    stop();m.set('');
+    if(!a.value||isNaN(new Date(a.value))){o.textContent='';m.set('Please choose a target date and time.');return;}
+    tick();
+    if(new Date(a.value)-new Date()>0) t=setInterval(tick,250);
+  };
+  onClose(stop);
+  el.append(field('Target',a),h('div',{class:'acts'},btn('Start',start,'pri'),btn('Stop',()=>{stop()})),m,o);
 }
 
 function notesTool(el){
@@ -541,14 +623,48 @@ function notesTool(el){
   },'pri');
   function subjectLabel(v){return v.trim()||'Study Notes'}
   pdf.disabled=true; actions.append(pdf);
-  el.append(h('div',{class:'two'},field('Course',course),field('Year / Semester',year),field('University',univ),field('Language',lang),field('Subject',sub),field('Topic',topic),field('Notes type',type)),btn('Generate AI notes',async()=>{
-    o.value='Generating…'; msg.set(''); pdf.disabled=true;
-    const base=getApiBase();
+  el.append(h('div',{class:'two'},field('Course',course),field('Year / Semester',year),field('University',univ),field('Language',lang),field('Subject',sub),field('Topic',topic),field('Notes type',type)),btn('Generate AI notes',async e=>{
+    const gb=e.currentTarget, base=getApiBase();
     if(!base || base.includes('YOUR-RENDER-SERVICE')){o.value='';msg.set('Set your Render backend URL in DEFAULT_API_BASE in app.js first.');return;}
-    try{const r=await fetch(base+'/api/generate-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course:course.value,year:year.value,university:univ.value,subject:sub.value,topic:topic.value,language:lang.value,notesType:type.value})});const j=await r.json();if(!r.ok)throw 0;o.value=j.notes||'No notes returned.';pdf.disabled=!o.value.trim();msg.set('Notes generated.',true);}catch{o.value='';msg.set('AI backend request failed. Check your Render URL, API key and backend logs.');}},'pri'),msg,o,actions);
+    if(!sub.value.trim()||!topic.value.trim()){msg.set('Please enter a subject and a topic.');return;}
+    o.value='Generating…'; msg.set('Generating notes. The backend may need up to a minute to wake up.',true); pdf.disabled=true; gb.disabled=true;
+    const ac=new AbortController(), tm=setTimeout(()=>ac.abort(),90000);
+    try{
+      const r=await fetch(base+'/api/generate-notes',{method:'POST',headers:{'Content-Type':'application/json'},signal:ac.signal,body:JSON.stringify({course:course.value,year:year.value,university:univ.value,subject:sub.value.trim(),topic:topic.value.trim(),language:lang.value,notesType:type.value})});
+      let j={}; try{j=await r.json();}catch{ /* non-JSON response */ }
+      if(!r.ok) throw new Error(typeof j.error==='string'?j.error.slice(0,200):'bad');
+      o.value=typeof j.notes==='string'?j.notes:''; if(!o.value.trim()) throw new Error('empty');
+      pdf.disabled=false; msg.set('Notes generated.',true);
+    }catch(err){
+      o.value='';
+      msg.set(err.name==='AbortError'?'The backend took too long to respond. Please try again.':(err.message&&err.message!=='bad'&&err.message!=='empty'&&err.name!=='TypeError'?err.message:'AI backend request failed. Check your Render URL, API key and backend logs.'));
+    }finally{clearTimeout(tm);gb.disabled=false;}
+  },'pri'),msg,o,actions);
 }
 
-function imageGrayTool(el){const f=inp({type:'file',accept:'image/*'}),q=inp({type:'range',min:0,max:100,value:90}),out=h('div',{class:'acts'}),m=msgEl();el.append(field('Image',f),field('JPEG quality',q),btn('Convert to grayscale',()=>{if(!f.files[0]){m.set('Select an image.');return}const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');x.drawImage(im,0,0);const d=x.getImageData(0,0,c.width,c.height);for(let i=0;i<d.data.length;i+=4){let y=.299*d.data[i]+.587*d.data[i+1]+.114*d.data[i+2];d.data[i]=d.data[i+1]=d.data[i+2]=y}x.putImageData(d,0,0);c.toBlob(b=>{out.replaceChildren(btn('Download PNG',()=>save('grayscale.png',b),'pri'))},'image/png')};im.src=URL.createObjectURL(f.files[0])},'pri'),m,out)}
+function imageGrayTool(el){
+  const f=inp({type:'file',accept:'image/*'}),fmt=sel([['png','PNG'],['jpeg','JPG']]),q=inp({type:'range',min:'10',max:'100',value:'90'}),out=h('div',{class:'acts'}),prev=h('img',{class:'prev',alt:'Grayscale result preview',hidden:true}),m=msgEl();let ou=null;
+  const run=async()=>{
+    out.replaceChildren();m.set('');const file=f.files[0];
+    if(!file){m.set('Select an image.');return}
+    if(!/^image\//.test(file.type)){m.set('Please select an image file.');return}
+    const u=mkUrl(file),im=new Image();
+    try{im.src=u;await im.decode()}catch{revUrl(u);m.set('Unable to read this image.');toast('Unable to read this image.','err');return}
+    try{
+      const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d'),type='image/'+fmt.value;
+      if(type==='image/jpeg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
+      x.drawImage(im,0,0);const d=x.getImageData(0,0,c.width,c.height);
+      for(let i=0;i<d.data.length;i+=4){const y=.299*d.data[i]+.587*d.data[i+1]+.114*d.data[i+2];d.data[i]=d.data[i+1]=d.data[i+2]=y}
+      x.putImageData(d,0,0);
+      const b=await new Promise((res,rej)=>c.toBlob(v=>v&&v.type===type?res(v):rej(new Error('fmt')),type,+q.value/100));
+      revUrl(ou);ou=mkUrl(b);prev.src=ou;prev.hidden=false;
+      out.replaceChildren(btn('Download '+(fmt.value==='png'?'PNG':'JPG'),()=>save('grayscale.'+(fmt.value==='png'?'png':'jpg'),b),'pri'));
+      m.set('Done.',true);
+    }catch{m.set('Something went wrong. The image may be too large to process.');toast('Conversion failed','err')}
+    finally{revUrl(u)}
+  };
+  el.append(field('Image',f),h('div',{class:'two'},field('Output format',fmt),field('JPG quality',q)),btn('Convert to grayscale',run,'pri'),m,prev,out);
+}
 function imageDataTool(el){const f=inp({type:'file',accept:'image/*'}),o=area({readonly:true});el.append(field('Image',f),btn('Read metadata',()=>{let x=f.files[0];o.value=x?`Name: ${x.name}\nType: ${x.type}\nSize: ${x.size} bytes\nLast modified: ${new Date(x.lastModified).toString()}`:'Select an image.'},'pri'),o)}
 
 function timeCalculatorTool(el){
@@ -561,77 +677,249 @@ function paletteTool(el){
   el.append(h('div',{class:'two'},field('Base color',base),field('Colors',count)),btn('Generate Palette',()=>{make();m.set('Click a color to copy it.',true)},'pri'),m,wrap);make();
 }
 
+/* ---------- tools completing the full tool list ---------- */
+function cgpaPctTool(el){
+  const c=num({min:'0'}),s=num({value:'10',min:'1'}),mode=sel([['m','CGPA × 9.5 (common Indian university formula)'],['s','CGPA ÷ scale × 100']]),out=h('div',{class:'big','aria-live':'polite'}),m=msgEl();
+  const run=()=>{
+    out.textContent='';m.set('');const g=val(c),sc=val(s);
+    if(!Number.isFinite(g)||g<0){m.set('Enter a valid CGPA.');return;}
+    if(mode.value==='s'&&!(sc>0)){m.set('Enter a valid scale above zero.');return;}
+    const max=mode.value==='s'?sc:10;
+    if(g>max){m.set(`CGPA cannot be above ${fmtN(max)}.`);return;}
+    out.textContent=`Percentage: ${(mode.value==='m'?g*9.5:g/sc*100).toFixed(2)}%`;
+  };
+  el.append(field('CGPA',c),field('Scale (used by the second formula)',s),field('Formula',mode),btn('Convert',run,'pri'),m,out,h('p',{class:'note'},'Universities use different formulas. Check your own university rules for the official conversion.'));
+}
+function pctChangeTool(el){
+  const a=num(),b=num(),out=h('div',{class:'big','aria-live':'polite'}),m=msgEl();
+  const run=()=>{
+    out.textContent='';m.set('');const x=val(a),y=val(b);
+    if(!Number.isFinite(x)||!Number.isFinite(y)){m.set('Please enter both values.');return;}
+    if(x===0){m.set('The old value cannot be zero.');return;}
+    const c=(y-x)/Math.abs(x)*100;
+    out.textContent=c===0?'No change (0%)':`${c>0?'Increase':'Decrease'}: ${Math.abs(c).toFixed(2)}% (change of ${fmtN(y-x)})`;
+  };
+  el.append(h('div',{class:'two'},field('Old value',a),field('New value',b)),btn('Calculate',run,'pri'),m,out);
+}
+const LOREM='lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum'.split(' ');
+const LOREM_START='Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
+function loremTool(el){
+  const kind=sel([['p','Paragraphs'],['s','Sentences'],['w','Words']]),n=num({value:'3',min:'1',step:'1'}),[cs,ls]=chk('Start with "Lorem ipsum dolor sit amet"',true),o=area({rows:10,readonly:true}),m=msgEl();
+  const R=k=>Math.floor(Math.random()*k), words=k=>Array.from({length:k},()=>LOREM[R(LOREM.length)]);
+  const sentence=()=>{const w=words(8+R(10));w[0]=cap(w[0]);return w.join(' ')+'.'};
+  const run=()=>{
+    m.set('');const c=val(n),k=kind.value,lim=k==='w'?1000:50;
+    if(!Number.isInteger(c)||c<1||c>lim){m.set(`Enter a whole number from 1 to ${lim}.`);return;}
+    const st=cs.checked;let t;
+    if(k==='w') t=(st?[...LOREM_START.toLowerCase().replace(/[,.]/g,'').split(' '),...words(Math.max(0,c-8))].slice(0,c):words(c)).join(' ');
+    else if(k==='s') t=Array.from({length:c},(_,i)=>i===0&&st?LOREM_START:sentence()).join(' ');
+    else t=Array.from({length:c},(_,i)=>{const s=Array.from({length:3+R(3)},sentence);if(i===0&&st)s[0]=LOREM_START;return s.join(' ')}).join('\n\n');
+    o.value=t;
+  };
+  el.append(h('div',{class:'two'},field('Type',kind),field('Amount',n)),h('div',{class:'opts'},ls),h('div',{class:'acts'},btn('Generate',run,'pri'),copyBtn(()=>o.value),dlBtn(()=>o.value,'lorem-ipsum.txt')),m,field('Result',o));
+  run();
+}
+function imagePreviewTool(el){
+  const info=h('div',{class:'stats','aria-live':'polite'}),prev=h('img',{class:'prev',alt:'Selected image preview',hidden:true});let cur=null;
+  const gcd=(a,b)=>b?gcd(b,a%b):a;
+  const zone=pickImage((img,f,u)=>{
+    revUrl(cur);cur=u;prev.src=u;prev.hidden=false;
+    const W=img.naturalWidth,H=img.naturalHeight,d=gcd(W,H);
+    info.replaceChildren(stat('File name',f.name),stat('Type',f.type),stat('File size',fb(f.size)),stat('Dimensions',`${W} × ${H} px`),stat('Aspect ratio',`${W/d}:${H/d}`),stat('Megapixels',(W*H/1e6).toFixed(2)));
+  });
+  el.append(zone,prev,info);
+}
+function cropTool(el){
+  const st={img:null,x:0,y:0,cw:0,ch:0,out:null,blob:null,base:null};
+  const cv=h('canvas',{role:'img','aria-label':'Image with crop selection',hidden:true,style:'max-width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:12px'});
+  const X=num({min:'0',step:'1'}),Y=num({min:'0',step:'1'}),CW=num({min:'1',step:'1'}),CH=num({min:'1',step:'1'}),fmt=sel([['png','PNG'],['jpeg','JPG'],['webp','WebP']]);
+  const prev=h('img',{class:'prev',alt:'Cropped result preview',hidden:true}),info=h('p',{class:'note'}),m=msgEl();
+  const fit=()=>{const W=st.img.naturalWidth,H=st.img.naturalHeight;st.x=Math.min(Math.max(0,Math.round(st.x)||0),W-1);st.y=Math.min(Math.max(0,Math.round(st.y)||0),H-1);st.cw=Math.min(Math.max(1,Math.round(st.cw)||1),W-st.x);st.ch=Math.min(Math.max(1,Math.round(st.ch)||1),H-st.y)};
+  const draw=()=>{
+    if(!st.img)return;const x=cv.getContext('2d'),sc=cv.width/st.img.naturalWidth;
+    x.drawImage(st.base,0,0);
+    const rx=st.x*sc,ry=st.y*sc,rw=st.cw*sc,rh=st.ch*sc;
+    x.fillStyle='rgba(0,0,0,.55)';x.fillRect(0,0,cv.width,ry);x.fillRect(0,ry+rh,cv.width,cv.height-ry-rh);x.fillRect(0,ry,rx,rh);x.fillRect(rx+rw,ry,cv.width-rx-rw,rh);
+    x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(rx+1,ry+1,Math.max(0,rw-2),Math.max(0,rh-2));
+  };
+  const sync=()=>{X.value=st.x;Y.value=st.y;CW.value=st.cw;CH.value=st.ch;draw()};
+  const fromInputs=()=>{if(!st.img)return;st.x=+X.value;st.y=+Y.value;st.cw=+CW.value;st.ch=+CH.value;fit();draw()};
+  [X,Y,CW,CH].forEach(i=>i.addEventListener('input',fromInputs));
+  let drag=null;
+  const pt=e=>{const r=cv.getBoundingClientRect(),k=st.img.naturalWidth/r.width;return[Math.min(st.img.naturalWidth,Math.max(0,Math.round((e.clientX-r.left)*k))),Math.min(st.img.naturalHeight,Math.max(0,Math.round((e.clientY-r.top)*k)))]};
+  cv.addEventListener('pointerdown',e=>{if(!st.img)return;e.preventDefault();try{cv.setPointerCapture(e.pointerId)}catch{ /* ignore */ }drag=pt(e)});
+  cv.addEventListener('pointermove',e=>{if(!drag)return;const[a,b]=pt(e);st.x=Math.min(drag[0],a);st.y=Math.min(drag[1],b);st.cw=Math.abs(a-drag[0]);st.ch=Math.abs(b-drag[1]);fit();sync()});
+  const end=()=>{drag=null};cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+  const zone=pickImage(img=>{
+    st.img=img;st.x=0;st.y=0;st.cw=img.naturalWidth;st.ch=img.naturalHeight;revUrl(st.out);st.out=null;st.blob=null;prev.hidden=true;m.set('');
+    const sc=Math.min(1,720/img.naturalWidth);cv.width=Math.max(1,Math.round(img.naturalWidth*sc));cv.height=Math.max(1,Math.round(img.naturalHeight*sc));
+    st.base=document.createElement('canvas');st.base.width=cv.width;st.base.height=cv.height;st.base.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    cv.hidden=false;info.textContent=`Original: ${img.naturalWidth} × ${img.naturalHeight} px. Drag on the image to select the area to keep, or type exact values.`;sync();
+  });
+  const run=async()=>{
+    m.set('');if(!st.img){m.set('Please select an image first.');toast('Please select an image first.','err');return;}
+    fromInputs();const type='image/'+fmt.value;
+    try{
+      const b=await new Promise((res,rej)=>{
+        const c=document.createElement('canvas');c.width=st.cw;c.height=st.ch;const x=c.getContext('2d');
+        if(!x)return rej(new Error('canvas'));
+        if(type==='image/jpeg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
+        x.drawImage(st.img,st.x,st.y,st.cw,st.ch,0,0,st.cw,st.ch);
+        c.toBlob(v=>v&&v.type===type?res(v):rej(new Error('fmt')),type,.92);
+      });
+      revUrl(st.out);st.out=mkUrl(b);st.blob=b;prev.src=st.out;prev.hidden=false;
+      m.set(`Cropped to ${st.cw} × ${st.ch} px (${fb(b.size)}).`,true);toast('Crop completed');
+    }catch(e){const t=e.message==='fmt'?'Your browser does not support this output format.':'Something went wrong. The image may be too large to process.';m.set(t);toast(t,'err')}
+  };
+  const dl=()=>{if(!st.blob){toast('Crop an image first.','err');return}save('cropped-image.'+(fmt.value==='jpeg'?'jpg':fmt.value),st.blob)};
+  el.append(zone,info,cv,h('div',{class:'two'},field('X (px)',X),field('Y (px)',Y),field('Width (px)',CW),field('Height (px)',CH)),field('Output format',fmt),
+    h('div',{class:'acts'},btn('Crop image',run,'pri'),btn('Download',dl),
+      btn('Select all',()=>{if(!st.img)return;st.x=0;st.y=0;st.cw=st.img.naturalWidth;st.ch=st.img.naturalHeight;sync()},'ghost'),
+      btn('Center square',()=>{if(!st.img)return;const s=Math.min(st.img.naturalWidth,st.img.naturalHeight);st.x=Math.round((st.img.naturalWidth-s)/2);st.y=Math.round((st.img.naturalHeight-s)/2);st.cw=s;st.ch=s;sync()},'ghost')),m,prev);
+}
+const COMMON_PW=['password','123456','12345678','qwerty','abc123','letmein','welcome','admin','iloveyou','monkey','dragon','111111','123123','football','login','princess','sunshine','000000'];
+function pwCheckTool(el){
+  const p=inp({type:'password',autocomplete:'off',spellcheck:'false'}),[sh,shl]=chk('Show password'),bar=h('i'),lab=h('p',{class:'note','aria-live':'polite'}),tips=h('ul',{});
+  const run=()=>{
+    const s=p.value;tips.replaceChildren();
+    if(!s){bar.style.width='0%';lab.textContent='Type a password to check its strength.';return}
+    let pool=0;if(/[a-z]/.test(s))pool+=26;if(/[A-Z]/.test(s))pool+=26;if(/\d/.test(s))pool+=10;if(/[^A-Za-z0-9]/.test(s))pool+=32;
+    let bits=s.length*Math.log2(pool||1);const low=s.toLowerCase(),issues=[];
+    if(COMMON_PW.some(c=>low.includes(c))){bits=Math.min(bits,25);issues.push('Contains a very common password or word.')}
+    if(/(.)\1{2,}/.test(s)){bits-=8;issues.push('Avoid repeating the same character.')}
+    if(/(?:0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef|qwer|wert|erty|asdf|zxcv)/i.test(s)){bits-=10;issues.push('Avoid simple sequences and keyboard patterns.')}
+    if(s.length<12)issues.push('Use at least 12 characters.');
+    if(!/[a-z]/.test(s)||!/[A-Z]/.test(s))issues.push('Mix uppercase and lowercase letters.');
+    if(!/\d/.test(s))issues.push('Add numbers.');
+    if(!/[^A-Za-z0-9]/.test(s))issues.push('Add symbols.');
+    bits=Math.max(0,bits);
+    const lvl=bits<28?'Very weak':bits<40?'Weak':bits<60?'Fair':bits<80?'Strong':'Very strong';
+    bar.style.width=Math.min(100,bits/1.28)+'%';lab.textContent=`Strength: ${lvl} (estimated ${Math.round(bits)} bits)`;
+    tips.append(...issues.map(t=>h('li',{},t)));
+  };
+  p.addEventListener('input',run);sh.addEventListener('change',()=>{p.type=sh.checked?'text':'password'});
+  el.append(field('Password to check',p),h('div',{class:'opts'},shl),h('div',{class:'meter',role:'presentation'},bar),lab,tips,
+    h('p',{class:'note'},'Checked only inside your browser. Nothing is sent or stored. This is an estimate, not a guarantee.'));
+  run();
+}
+function randStrTool(el){
+  if(!cryptoOk()){el.append(h('p',{class:'msg'},'Your browser does not support secure random numbers.'));return;}
+  const len=num({value:'16',min:'1',step:'1'}),cnt=num({value:'5',min:'1',step:'1'}),[cu,lu]=chk('Uppercase (A-Z)',true),[cl,ll]=chk('Lowercase (a-z)',true),[cn,ln]=chk('Numbers (0-9)',true),[cs,ls]=chk('Symbols (!@#…)',false),o=area({rows:8,readonly:true}),m=msgEl();
+  const run=()=>{
+    const L=val(len),N=val(cnt);
+    if(!Number.isInteger(L)||L<1||L>256||!Number.isInteger(N)||N<1||N>100){m.set('Length must be 1-256 and count 1-100 (whole numbers).');return;}
+    const pool=[cu.checked&&'ABCDEFGHIJKLMNOPQRSTUVWXYZ',cl.checked&&'abcdefghijklmnopqrstuvwxyz',cn.checked&&'0123456789',cs.checked&&'!@#$%^&*()-_=+[]{};:,.?'].filter(Boolean).join('');
+    if(!pool){m.set('Select at least one character type.');return;}
+    m.set('');o.value=Array.from({length:N},()=>Array.from({length:L},()=>pool[rnd(pool.length)]).join('')).join('\n');
+  };
+  el.append(h('div',{class:'two'},field('String length (1-256)',len),field('How many (1-100)',cnt)),h('div',{class:'opts'},lu,ll,ln,ls),h('div',{class:'acts'},btn('Generate',run,'pri'),copyBtn(()=>o.value),dlBtn(()=>o.value,'toolbox-pro-random-strings.txt')),m,field('Result',o));
+  run();
+}
+const TZ_FALLBACK=['UTC','Asia/Kolkata','Asia/Dubai','Asia/Singapore','Asia/Tokyo','Asia/Shanghai','Australia/Sydney','Europe/London','Europe/Paris','Europe/Berlin','Africa/Johannesburg','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Sao_Paulo','Pacific/Auckland'];
+function tzList(){let l=[];try{if(Intl.supportedValuesOf)l=Intl.supportedValuesOf('timeZone')}catch{ /* use fallback */ }if(!l.length)l=TZ_FALLBACK.slice();if(!l.includes('UTC'))l=['UTC',...l];return l}
+function tzOffsetMs(ts,tz){
+  const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(new Date(ts)).map(x=>[x.type,x.value]));
+  return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour%24,+p.minute,+p.second)-Math.floor(ts/1000)*1000;
+}
+function wallToUtc(s,tz){
+  const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(s);if(!m)return NaN;
+  const g=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0));let t=g-tzOffsetMs(g,tz);t=g-tzOffsetMs(t,tz);return t;
+}
+function tzTool(el){
+  const zones=tzList(),local=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+  if(!zones.includes(local))zones.unshift(local);
+  const dt=inp({type:'datetime-local',value:new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}),from=sel(zones),to=sel(zones),out=h('div',{class:'stats','aria-live':'polite'}),m=msgEl();
+  from.value=local;to.value=local==='UTC'?'America/New_York':'UTC';
+  const run=()=>{
+    out.replaceChildren();m.set('');
+    if(!dt.value){m.set('Please choose a date and time.');return;}
+    try{
+      const t=wallToUtc(dt.value,from.value);if(!Number.isFinite(t)||isNaN(new Date(t)))throw 0;
+      const f=z=>new Intl.DateTimeFormat(undefined,{timeZone:z,dateStyle:'full',timeStyle:'long'}).format(new Date(t));
+      out.append(stat(from.value,f(from.value)),stat(to.value,f(to.value)),stat('UTC',new Date(t).toUTCString()));
+    }catch{m.set('Could not convert that date and time. Please check your input.');}
+  };
+  [dt,from,to].forEach(c=>c.addEventListener('change',run));
+  el.append(field('Date and time',dt),h('div',{class:'two'},field('From time zone',from),field('To time zone',to)),
+    h('div',{class:'acts'},btn('Convert',run,'pri'),btn('Swap zones',()=>{const a=from.value;from.value=to.value;to.value=a;run()})),m,out);
+  run();
+}
+
 /* ---------- registry ---------- */
 const T = (id, name, cat, icon, desc, render) => ({ id, name, cat, icon, desc, render });
 const TOOLS = [
-  T('age', 'Age Calculator', 'Calculators', 'Age', 'Find your exact age in years, months, days and total days.', ageTool),
-  T('percentage', 'Percentage Calculator', 'Calculators', '%', 'Percent of a number, ratios, and percentage increase or decrease.', pctTool),
-  T('cgpa', 'CGPA Calculator', 'Calculators', 'GPA', 'Add subjects with grade points and credits to get your CGPA.', cgpaTool),
-  T('bmi', 'BMI Calculator', 'Calculators', 'BMI', 'Calculate body mass index in metric or imperial units.', bmiTool),
-  T('discount', 'Discount Calculator', 'Calculators', '−%', 'See the discount amount, final price and savings for any sale.', discountTool),
-  T('word-counter', 'Word Counter', 'Text', 'Wc', 'Count words, characters, sentences and paragraphs as you type.', wordTool),
-  T('char-counter', 'Character Counter', 'Text', 'Ch', 'Live character, word and line counts for any text.', charTool),
-  T('case-converter', 'Case Converter', 'Text', 'Aa', 'Switch text between upper, lower, title, sentence and toggle case.', caseTool),
+  T('bcom-aggregate', 'B.Com Aggregate Percentage Calculator', 'Education', 'B.Com', 'Calculate overall aggregate percentage from total marks.', bcomAggTool),
+  T('percentage', 'Percentage Calculator', 'Calculators', '%', 'Calculate percentages, percent-of values, and percentage changes.', pctTool),
+  T('cgpa', 'CGPA Calculator', 'Education', 'GPA', 'Calculate a credit-weighted CGPA from subjects.', cgpaTool),
+  T('sgpa', 'SGPA Calculator', 'Education', 'SGPA', 'Calculate a credit-weighted semester GPA.', sgpaTool),
+  T('gpa', 'GPA Calculator', 'Education', 'GPA', 'Calculate GPA from points and the selected scale.', el => simpleCalc(el, 'Enter GPA points and the maximum GPA scale.', [['GPA points'], ['Scale']], x => { const p = +x[0].value, s = +x[1].value; if (!(s > 0) || !(p >= 0) || p > s) throw 0; return `GPA: ${p.toFixed(2)} / ${fmtN(s)} (${(p / s * 100).toFixed(2)}% of scale)`; })),
+  T('marks-grade', 'Marks to Grade', 'Education', 'Grade', 'Convert marks into a percentage and common grade.', marksGradeTool),
+  T('cgpa-percentage', 'CGPA to Percentage', 'Education', 'CGPA%', 'Convert CGPA to percentage using a selectable multiplier.', cgpaPctTool),
+  T('study-time', 'Study Time Calculator', 'Education', 'Study', 'Calculate total study time including breaks.', studyTimeTool),
+  T('exam-countdown', 'Exam Countdown', 'Education', 'Exam', 'Count the days remaining until an exam.', examCountdownTool),
+  T('ai-notes', 'AI Study Notes Generator', 'Education', 'AI', 'Generate structured exam-oriented study notes through the secure backend.', notesTool),
+
+  T('age', 'Age Calculator', 'Calculators', 'Age', 'Find exact age in years, months, days and total days.', ageTool),
+  T('bmi', 'BMI Calculator', 'Calculators', 'BMI', 'Calculate BMI in metric or imperial units.', bmiTool),
+  T('discount', 'Discount Calculator', 'Calculators', '−%', 'Calculate discount amount, final price and savings.', discountTool),
+  T('gst', 'GST Calculator', 'Calculators', 'GST', 'Calculate GST amount and total price.', gstTool),
+  T('emi', 'EMI Calculator', 'Calculators', 'EMI', 'Calculate monthly loan EMI using the reducing-balance formula.', emiTool),
+  T('simple-interest', 'Simple Interest Calculator', 'Calculators', 'SI', 'Calculate simple interest and total amount.', interestTool),
+  T('compound-interest', 'Compound Interest Calculator', 'Calculators', 'CI', 'Calculate compound interest and final amount.', compoundTool),
+  T('average', 'Average Calculator', 'Calculators', 'AVG', 'Calculate the arithmetic mean of a list of numbers.', averageTool),
+  T('ratio', 'Ratio Calculator', 'Calculators', 'Ratio', 'Simplify a ratio.', ratioTool),
+  T('profit-loss', 'Profit & Loss Calculator', 'Calculators', 'P/L', 'Calculate profit or loss and percentage.', profitTool),
+  T('fraction', 'Fraction Calculator', 'Calculators', '½', 'Add two fractions and simplify the result.', fractionTool),
+  T('time-calculator', 'Time Calculator', 'Utilities', '⏱', 'Add or subtract hours and minutes.', timeCalculatorTool),
+  T('date-difference', 'Date Difference Calculator', 'Utilities', 'Δ', 'Calculate the number of days between two dates.', dateDiffTool),
+  T('percentage-change', 'Percentage Change Calculator', 'Calculators', 'Δ%', 'Find percentage increase or decrease between values.', pctChangeTool),
+
+  T('word-counter', 'Word Counter', 'Text', 'Wc', 'Count words and related text statistics.', wordTool),
+  T('char-counter', 'Character Counter', 'Text', 'Ch', 'Count characters, words and lines.', charTool),
+  T('line-counter', 'Line Counter', 'Text', 'Lines', 'Count lines in text.', lineCountTool),
+  T('reading-time', 'Reading Time Calculator', 'Text', 'Read', 'Estimate reading time from word count.', readingTool),
+  T('uppercase-lowercase', 'Uppercase/Lowercase Converter', 'Text', 'Aa', 'Convert text to uppercase or lowercase.', el => caseTransformTool(el, 'upper-lower')),
+  T('title-case', 'Title Case Converter', 'Text', 'Title', 'Convert text to title case while handling common small words.', el => caseTransformTool(el, 'title')),
+  T('reverse-text', 'Text Reverser', 'Text', '↔', 'Reverse the characters in text.', reverseTool),
   T('duplicate-lines', 'Duplicate Line Remover', 'Text', '≠', 'Remove repeated lines with case and whitespace options.', dedupeTool),
-  T('text-sorter', 'Text Sorter', 'Text', 'A↓Z', 'Sort lines alphabetically or numerically, reverse or shuffle them.', sortTool),
-  T('json', 'JSON Formatter', 'Developer', '{ }', 'Format, minify and validate JSON with clear error messages.', jsonTool),
-  T('base64', 'Base64 Encoder / Decoder', 'Developer', '64', 'Convert text to Base64 and back, with full UTF-8 support.', b64Tool),
-  T('url-codec', 'URL Encoder / Decoder', 'Developer', '%20', 'Percent-encode or decode URLs and query strings.', urlTool),
-  T('uuid', 'UUID Generator', 'Developer', 'ID', 'Generate one or many random version 4 UUIDs.', uuidTool),
-  T('hash', 'Hash Generator', 'Developer', '#', 'Create SHA-256, SHA-384 or SHA-512 hashes with Web Crypto.', hashTool),
-  T('image-compressor', 'Image Compressor', 'Image', 'Zip', 'Shrink JPG, PNG and WebP images with quality and size limits.', el => imgTool(el, { name: 'compressed-image', go: 'Compress image', fmts: [['jpeg', 'JPG'], ['png', 'PNG'], ['webp', 'WebP']], q: true, max: true })),
-  T('image-resizer', 'Image Resizer', 'Image', '⤢', 'Resize images to exact dimensions and export as JPG, PNG or WebP.', el => imgTool(el, { name: 'resized-image', go: 'Resize image', fmts: [['jpeg', 'JPG'], ['png', 'PNG'], ['webp', 'WebP']], resize: true })),
-  T('jpg-png', 'JPG ↔ PNG Converter', 'Image', '⇄', 'Convert JPG images to PNG or PNG images to JPG.', el => imgTool(el, { name: 'converted-image', go: 'Convert image', modes: [['jp', 'JPG to PNG'], ['pj', 'PNG to JPG']],
-    fixed: mode => mode.value === 'jp' ? 'png' : 'jpeg', check: (f, mode) => mode.value === 'jp' ? (f.type === 'image/jpeg' ? '' : 'Please select a JPG image for JPG to PNG.') : (f.type === 'image/png' ? '' : 'Please select a PNG image for PNG to JPG.') })),
-  T('image-webp', 'Image to WebP', 'Image', 'Web', 'Convert JPG or PNG images to the efficient WebP format.', el => imgTool(el, { name: 'image', go: 'Convert to WebP', fixed: 'webp', q: true })),
-  T('image-base64', 'Image to Base64', 'Image', '</>', 'Turn an image into a Base64 string or data URL.', b64ImgTool),
-  T('qr', 'QR Code Generator', 'Utilities', 'QR', 'Create QR codes for text, links, email or phone numbers.', qrTool),
+  T('text-sorter', 'Text Sorter', 'Text', 'A↓Z', 'Sort lines alphabetically, numerically, reverse or randomly.', sortTool),
+  T('whitespace', 'Text Cleaner', 'Text', 'Clean', 'Normalize whitespace and excess blank lines.', whitespaceTool),
+  T('lorem-ipsum', 'Lorem Ipsum Generator', 'Text', 'Lorem', 'Generate placeholder paragraphs, sentences or words.', loremTool),
+  T('text-extractor', 'Text Extractor', 'Text', 'Extract', 'Extract emails, URLs, numbers, hashtags, mentions or non-empty lines.', textExtractorTool),
+
+  T('json', 'JSON Formatter', 'Developer', '{ }', 'Format and minify JSON with validation.', jsonTool),
+  T('json-validator', 'JSON Validator', 'Developer', '✓', 'Validate JSON and show parse errors.', jsonValidatorTool),
+  T('base64', 'Base64 Encoder/Decoder', 'Developer', '64', 'Encode text to Base64 or decode Base64 as UTF-8 text.', b64Tool),
+  T('url-codec', 'URL Encoder/Decoder', 'Developer', '%20', 'Percent-encode or decode URLs and query text.', urlTool),
+  T('uuid', 'UUID Generator', 'Developer', 'ID', 'Generate random version 4 UUIDs.', uuidTool),
+  T('hash', 'Hash Generator', 'Developer', '#', 'Generate SHA-256, SHA-384 or SHA-512 hashes locally.', hashTool),
+  T('jwt-decoder', 'JWT Decoder', 'Developer', 'JWT', 'Decode a JWT payload locally without sending it anywhere.', jwtTool),
+  T('html-encode', 'HTML Entity Encoder/Decoder', 'Developer', '&', 'Encode or decode common HTML entities.', htmlEncodeTool),
+  T('timestamp', 'Unix Timestamp Converter', 'Developer', 'Unix', 'Convert Unix timestamps to dates and dates to Unix timestamps.', tsTool),
+  T('regex-tester', 'Regex Tester', 'Developer', '.*', 'Test regular expressions against text.', regexTool),
+  T('color', 'Color Converter', 'Developer', 'HEX', 'Convert between HEX, RGB and HSL with a live preview.', colorTool),
+
+  T('image-compressor', 'Image Compressor', 'Image', 'Zip', 'Compress JPG, PNG or WebP images in the browser.', el => imgTool(el, { name: 'compressed-image', go: 'Compress image', fmts: [['jpeg', 'JPG'], ['png', 'PNG'], ['webp', 'WebP']], q: true, max: true })),
+  T('image-resizer', 'Image Resizer', 'Image', '⤢', 'Resize images to exact dimensions and export them.', el => imgTool(el, { name: 'resized-image', go: 'Resize image', fmts: [['jpeg', 'JPG'], ['png', 'PNG'], ['webp', 'WebP']], resize: true })),
+  T('jpg-to-png', 'JPG to PNG', 'Image', 'J→P', 'Convert a JPG image to PNG using canvas.', jpgToPngTool),
+  T('png-to-jpg', 'PNG to JPG', 'Image', 'P→J', 'Convert a PNG image to JPG using canvas.', pngToJpgTool),
+  T('image-webp', 'Image to WebP', 'Image', 'WebP', 'Convert an image to WebP in the browser.', el => imgTool(el, { name: 'image-webp', go: 'Convert to WebP', fixed: 'webp', q: true })),
+  T('image-base64', 'Image to Base64', 'Image', '</>', 'Convert an image into a data URL or Base64 text.', b64ImgTool),
+  T('image-cropper', 'Image Cropper', 'Image', 'Crop', 'Select an area and crop an image locally.', cropTool),
+  T('image-grayscale', 'Grayscale Image', 'Image', 'Gray', 'Convert an image to grayscale with canvas.', imageGrayTool),
+  T('image-preview', 'Image Preview', 'Image', 'View', 'Preview an image and inspect dimensions and file size.', imagePreviewTool),
+
+  T('password', 'Password Generator', 'Security', '•••', 'Generate strong random passwords locally.', pwTool),
+  T('password-strength', 'Password Strength Checker', 'Security', 'Safe', 'Check password strength privately in your browser.', pwCheckTool),
+  T('random-number', 'Random Number Generator', 'Utilities', 'RNG', 'Generate a random integer in an inclusive range.', randomTool),
+  T('random-string', 'Random String Generator', 'Utilities', 'Rand', 'Generate random strings with custom character sets.', randStrTool),
   T('units', 'Unit Converter', 'Utilities', 'm↔ft', 'Convert length, weight, temperature, area, volume, speed, time and data.', unitTool),
-  T('timestamp', 'Timestamp Converter', 'Utilities', 'Unix', 'Convert Unix timestamps to dates and dates to timestamps.', tsTool),
-  T('color', 'Color Converter', 'Utilities', 'HEX', 'Convert between HEX, RGB and HSL with a live preview.', colorTool),
-  T('password', 'Password Generator', 'Utilities', '•••', 'Create strong random passwords with a secure generator.', pwTool),
-  T('bcom-aggregate','B.Com Aggregate Percentage','Education','B.Com','Calculate overall aggregate percentage from total marks.',bcomAggTool),
-  T('sgpa','SGPA Calculator','Education','SGPA','Calculate credit-weighted semester GPA.',sgpaTool),
-  T('gpa','GPA Calculator','Education','GPA','Calculate a simple GPA from points and scale.',el=>simpleCalc(el,'Enter GPA points and scale.',[['GPA points'],['Scale']],x=>`${(+x[0].value).toFixed(2)} / ${x[1].value}`)),
-  T('marks-grade','Marks to Grade','Education','Grade','Convert marks to percentage and a common grade.',marksGradeTool),
-  T('exam-countdown','Exam Countdown','Education','Exam','Count days remaining until an exam.',examCountdownTool),
-  T('study-time','Study Time Calculator','Education','Study','Calculate total study and break time.',studyTimeTool),
-  T('ai-notes','AI Study Notes Generator','Education','AI','Generate exam-oriented B.Com/B.A. notes through your secure backend.',notesTool),
-  T('gst','GST Calculator','Calculators','GST','Calculate GST and total amount.',gstTool),
-  T('emi','EMI Calculator','Calculators','EMI','Calculate monthly loan EMI.',emiTool),
-  T('simple-interest','Simple Interest','Calculators','SI','Calculate simple interest and total amount.',interestTool),
-  T('compound-interest','Compound Interest','Calculators','CI','Calculate compound interest and final amount.',compoundTool),
-  T('profit-loss','Profit & Loss','Calculators','P/L','Calculate profit or loss and percentage.',profitTool),
-  T('ratio','Ratio Calculator','Calculators','Ratio','Simplify a ratio.',ratioTool),
-  T('average','Average Calculator','Calculators','AVG','Calculate average of comma-separated numbers.',averageTool),
-  T('fraction','Fraction Calculator','Calculators','½','Add two fractions and simplify.',fractionTool),
-  T('reverse-text','Text Reverser','Text','↔','Reverse characters in text.',reverseTool),
-  T('whitespace','Text Cleaner','Text','Clean','Normalize spaces and excess blank lines.',whitespaceTool),
-  T('line-counter','Line Counter','Text','Lines','Count lines in text.',lineCountTool),
-  T('reading-time','Reading Time Calculator','Text','Read','Estimate reading time from text.',readingTool),
-  T('find-replace','Find & Replace','Text','Find','Replace all occurrences in text.',findReplaceTool),
-  T('slug','Slug Generator','Text','Slug','Create URL-friendly slugs.',slugTool),
-  T('extract-emails','Email Extractor','Text','@','Extract email addresses from text.',emailsTool),
-  T('extract-urls','URL Extractor','Text','URL','Extract web URLs from text.',urlsTool),
-  T('text-compare','Text Compare','Text','≠','Compare two pieces of text.',textCompareTool),
-  T('html-encode','HTML Entity Encoder','Developer','&lt;','Encode HTML-sensitive characters.',htmlEncodeTool),
-  T('regex-tester','Regex Tester','Developer','.*','Test a regular expression against text.',regexTool),
-  T('jwt-decoder','JWT Decoder','Developer','JWT','Decode a JWT payload locally.',jwtTool),
-  T('url-parser','URL Parser','Developer','URL','Parse protocol, host, path, query and hash.',urlParseTool),
-  T('csv-json','CSV to JSON','Developer','CSV','Convert simple CSV rows to JSON.',csvJsonTool),
-  T('json-csv','JSON to CSV','Developer','JSON','Convert a JSON array of objects to CSV.',jsonCsvTool),
-  T('number-words','Number to Words','Utilities','123','Convert a positive integer to English words.',numberWordsTool),
-  T('contrast','Color Contrast Checker','Utilities','◐','Check WCAG-style contrast ratio.',contrastTool),
-  T('random-number','Random Number Generator','Utilities','RNG','Generate a random integer in a range.',randomTool),
-  T('stopwatch','Stopwatch','Date','⏱','Start, stop and reset a browser stopwatch.',stopwatchTool),
-  T('countdown','Countdown Timer','Date','⏳','Count down to a chosen date and time.',countdownTool),
-  T('date-difference','Date Difference','Date','Δ','Calculate days between two dates.',dateDiffTool),
-  T('date-add','Date Add/Subtract','Date','±','Add or subtract days from a date.',dateAddTool),
-  T('time-calculator', 'Time Calculator', 'Utilities','⏱','Add or subtract hours and minutes.', timeCalculatorTool),
-  T('color-palette', 'Color Palette Generator', 'Utilities','🎨','Generate a harmonious light palette from a base color.', paletteTool),
-  T('bmi-plus','BMI Calculator Plus','Calculators','BMI+','Calculate BMI with a category.',bmiTool2),
-  T('image-grayscale','Image Grayscale','Image','Gray','Convert an image to grayscale in the browser.',imageGrayTool),
-  T('image-metadata','Image File Info','Image','Info','Inspect image file name, type, size and modified time.',imageDataTool)
+  T('timezone', 'Time Zone Converter', 'Utilities', 'TZ', 'Convert a date and time between world time zones.', tzTool),
+  T('countdown', 'Countdown Timer', 'Utilities', '⏳', 'Count down to a selected date and time.', countdownTool),
+  T('stopwatch', 'Stopwatch', 'Utilities', '⏱', 'Start, stop and reset a browser stopwatch.', stopwatchTool),
+  T('qr', 'QR Code Generator', 'Utilities', 'QR', 'Generate a real scannable QR code and download it as PNG.', qrTool),
+  T('color-palette', 'Color Palette Generator', 'Utilities', '🎨', 'Generate a useful palette from a base color.', paletteTool),
+  T('contrast', 'Color Contrast Checker', 'Utilities', '◐', 'Calculate the contrast ratio between two colors.', contrastTool)
 ];
 
 /* ---------- home page ---------- */
@@ -671,13 +959,26 @@ $('#q').addEventListener('input', e => { query = e.target.value; render(); });
 
 /* ---------- tool dialog ---------- */
 let lastFocus = null;
+function initToolAds() {
+  const slots = document.querySelectorAll('#dlg .tool-ad .adsbygoogle');
+  slots.forEach(ins => {
+    if (ins.dataset.tbpAdInitialized === '1') return;
+    try {
+      window.adsbygoogle = window.adsbygoogle || [];
+      window.adsbygoogle.push({});
+      ins.dataset.tbpAdInitialized = '1';
+    } catch { /* AdSense can retry when its script is ready. */ }
+  });
+}
+
 function openTool(id, trigger, fromPop) {
   const t = byId(id); if (!t) return;
-  lastFocus = trigger || lastFocus; revokeAll();
+  lastFocus = trigger || lastFocus; revokeAll(); runCleanups();
   $('#dlg-title').textContent = t.name; $('#dlg-desc').textContent = t.desc;
   const body = $('#dlg-body'); body.replaceChildren();
   try { t.render(body); } catch { body.replaceChildren(h('p', { class: 'msg' }, 'Something went wrong. Please try again.')); }
   dlg.classList.remove('closing'); if (!dlg.open) dlg.showModal();
+  requestAnimationFrame(() => requestAnimationFrame(initToolAds));
   if (!fromPop && location.hash !== '#tool-' + id) history.pushState(null, '', '#tool-' + id);
   const r = recents().filter(x => x !== id); r.unshift(id); store.set('tbp:recent', r.slice(0, 6));
   body.scrollTop = 0; $('#dlg-title').focus({ preventScroll: true });
@@ -691,13 +992,14 @@ const requestClose = () => location.hash.startsWith('#tool-') ? history.back() :
 $('#dlg-close').addEventListener('click', requestClose);
 dlg.addEventListener('cancel', e => { e.preventDefault(); requestClose(); });
 dlg.addEventListener('click', e => { if (e.target === dlg) requestClose(); });
-dlg.addEventListener('close', () => { revokeAll(); $('#dlg-body').replaceChildren(); document.body.append($('#toasts')); render(false); if (lastFocus && lastFocus.isConnected) lastFocus.focus(); });
+dlg.addEventListener('close', () => { revokeAll(); runCleanups(); $('#dlg-body').replaceChildren(); document.body.append($('#toasts')); render(false); if (lastFocus && lastFocus.isConnected) lastFocus.focus(); });
 addEventListener('popstate', () => { const m = location.hash.match(/^#tool-(.+)$/); if (m && byId(m[1])) openTool(m[1], null, true); else closeDlg(); });
 
 /* ---------- theme ---------- */
 const themeBtn = $('#theme');
-function paintTheme() { const d = document.documentElement.dataset.theme === 'dark'; themeBtn.textContent = d ? '☀' : '☾'; themeBtn.setAttribute('aria-label', d ? 'Switch to light mode' : 'Switch to dark mode'); }
+function paintTheme() { const d = document.documentElement.dataset.theme === 'dark'; const label = d ? 'Switch to light mode' : 'Switch to dark mode'; themeBtn.textContent = d ? '☀' : '☾'; themeBtn.setAttribute('aria-label', label); themeBtn.title = label; }
 themeBtn.addEventListener('click', () => { const n = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = n; try { localStorage.setItem('tbp:theme', n); } catch { /* ignore */ } paintTheme(); });
+if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = 'dark';
 paintTheme(); render(false);
 { const m = location.hash.match(/^#tool-(.+)$/); if (m && byId(m[1])) { history.replaceState(null, '', location.pathname + location.search); openTool(m[1], null); } }
 

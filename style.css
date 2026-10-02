@@ -191,3 +191,10 @@ dialog{animation:softPop .22s ease both}dialog::backdrop{background:rgba(3,8,15,
   align-items:center;
   justify-content:center;
 }
+
+/* ToolBox Pro theme compatibility */
+html[data-theme=light] body::before{opacity:.55}
+@media(max-width:760px){.top{width:min(1120px,100% - 20px)}}
+.result{background:var(--bg);border:1px solid var(--ln);border-radius:12px;padding:.8rem;min-height:44px;overflow-wrap:anywhere;white-space:pre-wrap}
+
+.result{background:var(--bg);border:1px solid var(--ln);border-radius:12px;padding:.8rem;min-height:44px;overflow-wrap:anywhere;white-space:pre-wrap}
