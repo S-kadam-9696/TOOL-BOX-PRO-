@@ -53,10 +53,6 @@ let urls = [];
 const mkUrl = b => { const u = URL.createObjectURL(b); urls.push(u); return u; };
 const revUrl = u => { if (u) { URL.revokeObjectURL(u); urls = urls.filter(x => x !== u); } };
 const revokeAll = () => { urls.forEach(u => URL.revokeObjectURL(u)); urls = []; };
-/* cleanup callbacks (timers etc.) run whenever a tool closes or another opens */
-let cleanups = [];
-const onClose = fn => cleanups.push(fn);
-const runCleanups = () => { const c = cleanups; cleanups = []; c.forEach(f => { try { f(); } catch { /* ignore */ } }); };
 
 /* ---------- ui helpers ---------- */
 const field = (label, ctl) => h('label', { class: 'f' }, typeof label === 'string' ? h('span', {}, label) : label, ctl);
@@ -107,6 +103,51 @@ function pctTool(el) {
   };
   el.append(field('Calculation', s), h('div', { class: 'two' }, field(la, a), field(lb, b)), btn('Calculate', run, 'pri'), m, out);
 }
+function cgpaTool(el) {
+  const rows = h('div', { class: 'rows' }), mult = num({ value: '9.5', min: '0' }), out = h('div', { class: 'stats', 'aria-live': 'polite' }), m = msgEl();
+  let n = 0;
+  const add = () => {
+    n++; const r = h('div', { class: 'row' }, inp({ type: 'text', 'aria-label': 'Subject name', value: 'Subject ' + n }),
+      num({ 'aria-label': 'Grade points', placeholder: 'Grade points', min: '0' }), num({ 'aria-label': 'Credits', placeholder: 'Credits', min: '0' }),
+      btn('Remove', () => { if (rows.children.length > 1) r.remove(); else toast('Keep at least one subject', 'err'); }, 'ghost'));
+    rows.append(r);
+  };
+  add(); add();
+  const run = () => {
+    out.replaceChildren(); m.set(''); let tp = 0, tc = 0;
+    for (const r of rows.children) {
+      const [, g, c] = r.querySelectorAll('input'), gp = val(g), cr = val(c);
+      if (!(gp >= 0) || !(cr > 0)) { m.set('Enter grade points (0 or more) and credits (above 0) for every subject.'); toast('Check your subjects', 'err'); return; }
+      tp += gp * cr; tc += cr;
+    }
+    const k = val(mult); if (!(k > 0)) { m.set('Enter a valid percentage multiplier.'); return; }
+    const cg = tp / tc; out.append(stat('CGPA', cg.toFixed(2)), stat('Percentage', (cg * k).toFixed(2) + '%'), stat('Total credits', fmtN(tc)));
+  };
+  el.append(rows, h('div', { class: 'acts' }, btn('Add subject', add), btn('Calculate CGPA', run, 'pri')), field('Percentage multiplier (percentage = CGPA × multiplier)', mult), m, out);
+}
+function bmiTool(el) {
+  const u = sel([['m', 'Metric (cm, kg)'], ['i', 'Imperial (in, lb)']]), lh = h('span'), lw = h('span'), ht = num({ min: '0' }), w = num({ min: '0' }), out = h('div', { class: 'stats', 'aria-live': 'polite' }), m = msgEl();
+  const lab = () => { lh.textContent = u.value === 'm' ? 'Height (cm)' : 'Height (inches)'; lw.textContent = u.value === 'm' ? 'Weight (kg)' : 'Weight (pounds)'; out.replaceChildren(); };
+  u.onchange = lab; lab();
+  const run = () => {
+    out.replaceChildren(); m.set(''); const H = val(ht), W = val(w);
+    if (!(H > 0) || !(W > 0)) { m.set('Please enter a height and weight above zero.'); return; }
+    const b = u.value === 'm' ? W / ((H / 100) ** 2) : 703 * W / (H ** 2);
+    if (!Number.isFinite(b) || b > 200) { m.set('Those values look unrealistic. Please check the units.'); return; }
+    out.append(stat('BMI', b.toFixed(1)), stat('Category', b < 18.5 ? 'Underweight' : b < 25 ? 'Normal weight' : b < 30 ? 'Overweight' : 'Obesity'));
+  };
+  el.append(field('Units', u), h('div', { class: 'two' }, field(lh, ht), field(lw, w)), btn('Calculate BMI', run, 'pri'), m, out,
+    h('p', { class: 'note' }, 'BMI is only a general screening measure. It does not account for muscle mass, age or body composition. Talk to a health professional for advice.'));
+}
+function discountTool(el) {
+  const p = num({ min: '0' }), d = num({ min: '0', max: '100' }), out = h('div', { class: 'stats', 'aria-live': 'polite' }), m = msgEl();
+  const run = () => {
+    out.replaceChildren(); m.set(''); const P = val(p), D = val(d);
+    if (!(P >= 0) || !(D >= 0 && D <= 100)) { m.set('Enter a price of 0 or more and a discount between 0 and 100.'); return; }
+    const sv = P * D / 100; out.append(stat('Discount amount', sv.toFixed(2)), stat('Final price', (P - sv).toFixed(2)), stat('Savings', fmtN(D) + '%'));
+  };
+  el.append(h('div', { class: 'two' }, field('Original price', p), field('Discount (%)', d)), btn('Calculate', run, 'pri'), m, out);
+}
 
 /* ---------- text tools ---------- */
 function liveCount(el, keys) {
@@ -123,157 +164,101 @@ function liveCount(el, keys) {
 }
 const wordTool = el => liveCount(el, ['Words', 'Characters', 'Characters without spaces', 'Sentences', 'Paragraphs', 'Reading time']);
 const charTool = el => liveCount(el, ['Characters', 'Characters without spaces', 'Words', 'Lines']);
-
-/* ---------- image tools ---------- */
-function pickImage(onImg, opt = {}) {
-  const maxMB = opt.maxMB || 25, input = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', class: 'sr' });
-  const zone = h('label', { class: 'drop' }, input, h('strong', {}, 'Choose an image'), h('span', {}, 'or drop it here (JPG, PNG or WebP, up to ' + maxMB + ' MB)'));
-  async function handle(f) {
-    if (!f) return;
-    if (!f.size) { toast('This file is empty.', 'err'); return; }
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { toast('Please select a JPG, PNG or WebP image.', 'err'); return; }
-    if (f.size > maxMB * 1048576) { toast(`This image is larger than ${maxMB} MB.`, 'err'); return; }
-    const ce = opt.check && opt.check(f); if (ce) { toast(ce, 'err'); return; }
-    const u = mkUrl(f), img = new Image();
-    try { img.src = u; await img.decode(); } catch { revUrl(u); toast('Unable to read this image.', 'err'); return; }
-    onImg(img, f, u);
-  }
-  input.onchange = () => { handle(input.files[0]); input.value = ''; };
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
-  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('over'); handle(e.dataTransfer.files[0]); });
-  return zone;
+const SMALL = new Set('a an and as at but by for in nor of on or per the to vs via'.split(' '));
+const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+function caseTool(el) {
+  const t = area({ rows: 9 });
+  const ops = [['UPPERCASE', s => s.toUpperCase()], ['lowercase', s => s.toLowerCase()],
+    ['Title Case', s => s.toLowerCase().replace(/[\p{L}\p{N}'’]+/gu, (w, i) => i > 0 && SMALL.has(w) ? w : cap(w))],
+    ['Sentence case', s => s.toLowerCase().replace(/(^\s*|[.!?]\s+|\n\s*)(\p{L})/gu, (m, a, b) => a + b.toUpperCase())],
+    ['Capitalize Words', s => s.toLowerCase().replace(/[\p{L}\p{N}'’]+/gu, cap)],
+    ['Toggle Case', s => [...s].map(c => c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()).join('')]];
+  el.append(field('Your text', t), h('div', { class: 'acts' }, ...ops.map(([n, f]) => btn(n, () => { if (!t.value) { toast('Please enter some text', 'err'); return; } t.value = f(t.value); }))),
+    h('div', { class: 'acts' }, copyBtn(() => t.value), dlBtn(() => t.value, 'toolbox-pro-result.txt'), btn('Clear', () => { t.value = ''; t.focus(); }, 'ghost')));
 }
-function canvasBlob(img, w, ht, type, q) {
-  return new Promise((res, rej) => {
+function dedupeTool(el) {
+  const t = area({ rows: 8 }), o = area({ rows: 8, readonly: true }), [c1, l1] = chk('Case sensitive', true), [c2, l2] = chk('Trim whitespace', true), [c3, l3] = chk('Keep first occurrence', true), m = msgEl();
+  const run = () => {
+    if (!t.value) { m.set('Please enter some lines first.'); toast('Please enter some text', 'err'); return; }
+    let L = t.value.split(/\r?\n/); if (c2.checked) L = L.map(x => x.trim());
+    const key = x => c1.checked ? x : x.toLowerCase(), seen = new Set(), keep = [], src = c3.checked ? L : [...L].reverse();
+    for (const x of src) { const k = key(x); if (!seen.has(k)) { seen.add(k); keep.push(x); } }
+    if (!c3.checked) keep.reverse();
+    o.value = keep.join('\n'); m.set(`Removed ${L.length - keep.length} duplicate line(s). ${keep.length} unique line(s) remain.`, true);
+  };
+  el.append(field('Lines', t), h('div', { class: 'opts' }, l1, l2, l3), btn('Remove duplicate lines', run, 'pri'), m, field('Result', o),
+    h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-result.txt')));
+}
+function sortTool(el) {
+  const t = area({ rows: 8 }), o = area({ rows: 8, readonly: true });
+  const nn = l => { const v = parseFloat(l.replace(/,/g, '')); return isNaN(v) ? null : v; };
+  const numCmp = dir => (a, b) => { const x = nn(a), y = nn(b); if (x === null && y === null) return 0; if (x === null) return 1; if (y === null) return -1; return dir * (x - y); };
+  const modes = { az: L => L.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })), za: L => L.sort((a, b) => b.localeCompare(a, undefined, { sensitivity: 'base' })),
+    na: L => L.sort(numCmp(1)), nd: L => L.sort(numCmp(-1)), rev: L => L.reverse(),
+    rnd: L => { for (let i = L.length - 1; i > 0; i--) { const j = cryptoOk() ? rnd(i + 1) : Math.floor(Math.random() * (i + 1)); [L[i], L[j]] = [L[j], L[i]]; } return L; } };
+  const s = sel([['az', 'A-Z'], ['za', 'Z-A'], ['na', 'Numeric ascending'], ['nd', 'Numeric descending'], ['rev', 'Reverse'], ['rnd', 'Randomize']]);
+  const run = () => { if (!t.value) { toast('Please enter some lines', 'err'); return; } o.value = modes[s.value](t.value.split(/\r?\n/)).join('\n'); };
+  el.append(field('Lines', t), field('Sort by', s), btn('Sort lines', run, 'pri'), field('Result', o), h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-result.txt')));
+}
+
+/* ---------- developer tools ---------- */
+function jsonTool(el) {
+  const t = area({ rows: 12 }), m = msgEl(), ind = sel([['2', '2 spaces'], ['4', '4 spaces'], ['tab', 'Tab']]);
+  const P = () => {
+    if (!t.value.trim()) { m.set('Please enter valid JSON.'); toast('Invalid JSON', 'err'); return null; }
+    try { return { v: JSON.parse(t.value) }; } catch (e) { m.set('Invalid JSON: ' + e.message); toast('Invalid JSON', 'err'); return null; }
+  };
+  el.append(field('JSON input', t), field('Indentation', ind), h('div', { class: 'acts' },
+    btn('Format', () => { const p = P(); if (p) { t.value = JSON.stringify(p.v, null, ind.value === 'tab' ? '\t' : +ind.value); m.set('Formatted successfully.', true); } }, 'pri'),
+    btn('Minify', () => { const p = P(); if (p) { t.value = JSON.stringify(p.v); m.set('Minified successfully.', true); } }),
+    btn('Validate', () => { const p = P(); if (p) { m.set('Valid JSON.', true); toast('Valid JSON'); } }),
+    copyBtn(() => t.value),
+    btn('Download JSON', () => { const p = P(); if (p) saveText('formatted.json', JSON.stringify(p.v, null, 2), 'application/json'); })), m);
+}
+function b64Tool(el) {
+  const t = area({ rows: 6 }), o = area({ rows: 6, readonly: true }), mode = sel([['e', 'Text to Base64'], ['d', 'Base64 to text']]), m = msgEl();
+  const run = () => {
+    m.set(''); o.value = '';
+    if (!t.value) { m.set('Please enter some input.'); return; }
     try {
-      const cv = document.createElement('canvas'); cv.width = w; cv.height = ht; const x = cv.getContext('2d');
-      if (!x) return rej(new Error('canvas'));
-      if (type === 'image/jpeg') { x.fillStyle = '#fff'; x.fillRect(0, 0, w, ht); }
-      x.drawImage(img, 0, 0, w, ht);
-      cv.toBlob(b => b && b.type === type ? res(b) : rej(new Error('fmt')), type, q);
-    } catch { rej(new Error('canvas')); }
-  });
-}
-
-/* ---------- registry ---------- */
-const T = (id, name, cat, icon, desc, render) => ({ id, name, cat, icon, desc, render });
-const TOOLS = [
-  T('age', 'Age Calculator', 'Calculators', 'Age', 'Find exact age in years, months, days and total days.', ageTool),
-  T('percentage', 'Percentage Calculator', 'Calculators', '%', 'Calculate percentages, percent-of values, and percentage changes.', pctTool),
-  T('word-counter', 'Word Counter', 'Text', 'Wc', 'Count words and related text statistics.', wordTool),
-  T('char-counter', 'Character Counter', 'Text', 'Ch', 'Count characters, words and lines.', charTool),
-];
-
-/* ---------- home page ---------- */
-const CATS = ['All Tools', 'Calculators', 'Text'];
-let cat = 'All Tools', query = '';
-const favs = () => store.get('tbp:fav', []), recents = () => store.get('tbp:recent', []);
-const byId = id => TOOLS.find(t => t.id === id);
-function card(t) {
-  const on = favs().includes(t.id);
-  const c = h('article', { class: 'card' }, h('div', { class: 'card-top' }, h('span', { class: 'ico', 'aria-hidden': 'true' }, t.icon),
-    h('button', { class: 'fav' + (on ? ' on' : ''), type: 'button', 'data-id': t.id, 'aria-pressed': String(on), 'aria-label': `${on ? 'Remove' : 'Add'} ${t.name} ${on ? 'from' : 'to'} favorites`, onclick: (e) => { e.stopPropagation(); toggleFav(t.id); } })),
-    h('h3', {}, t.name), h('p', {}, t.desc), h('div', { class: 'card-bot' }, h('span', { class: 'tag' }, t.cat),
-      h('button', { class: 'btn sm', type: 'button', 'aria-label': 'Open ' + t.name, onclick: e => { e.stopPropagation(); openTool(t.id, e.currentTarget); } }, 'Open Tool')));
-  c.addEventListener('click', () => openTool(t.id, $('.btn', c)));
-  return c;
-}
-function toggleFav(id) {
-  let f = favs(); f = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; store.set('tbp:fav', f);
-  toast(f.includes(id) ? 'Added to favorites' : 'Removed from favorites'); render(false);
-  const b = document.querySelector(`#grid .fav[data-id="${id}"]`); if (b) b.focus();
-}
-function render(anim = true) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const list = TOOLS.filter(t => (cat === 'All Tools' || t.cat === cat) && words.every(w => (t.name + ' ' + t.desc + ' ' + t.cat).toLowerCase().includes(w)));
-  const grid = $('#grid'); grid.replaceChildren(...list.map(card));
-  if (anim) { grid.classList.remove('swap'); void grid.offsetWidth; grid.classList.add('swap'); }
-  $('#empty').hidden = list.length > 0; $('#all-h').hidden = list.length === 0;
-  $('#count').textContent = list.length ? `${list.length} tool${list.length === 1 ? '' : 's'}` : 'No tools found';
-  const home = !words.length && cat === 'All Tools';
-  const fl = favs().map(byId).filter(Boolean), rl = recents().map(byId).filter(Boolean);
-  $('#favs-sec').hidden = !(home && fl.length); $('#favs').replaceChildren(...fl.map(card));
-  $('#recent-sec').hidden = !(home && rl.length); $('#recent').replaceChildren(...rl.map(card));
-  $('#chips').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.textContent === cat)));
-}
-$('#chips').append(...CATS.map(c => h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', onclick: () => { cat = c; render(); } }, c)));
-$('#q').addEventListener('input', e => { query = e.target.value; render(); });
-
-/* ---------- tool dialog ---------- */
-let lastFocus = null;
-function initToolAds() {
-  const slots = document.querySelectorAll('#dlg .tool-ad .adsbygoogle');
-  slots.forEach(ins => {
-    if (ins.dataset.tbpAdInitialized === '1') return;
-    try {
-      window.adsbygoogle = window.adsbygoogle || [];
-      window.adsbygoogle.push({});
-      ins.dataset.tbpAdInitialized = '1';
-    } catch { /* AdSense can retry when its script is ready. */ }
-  });
-}
-
-function openTool(id, trigger, fromPop) {
-  const t = byId(id); if (!t) return;
-  lastFocus = trigger || lastFocus; revokeAll(); runCleanups();
-  $('#dlg-title').textContent = t.name; $('#dlg-desc').textContent = t.desc;
-  const body = $('#dlg-body'); body.replaceChildren();
-  try { t.render(body); } catch { body.replaceChildren(h('p', { class: 'msg' }, 'Something went wrong. Please try again.')); }
-  dlg.classList.remove('closing'); if (!dlg.open) dlg.showModal();
-  requestAnimationFrame(() => requestAnimationFrame(initToolAds));
-  if (!fromPop && location.hash !== '#tool-' + id) history.pushState(null, '', '#tool-' + id);
-  const r = recents().filter(x => x !== id); r.unshift(id); store.set('tbp:recent', r.slice(0, 6));
-  body.scrollTop = 0; $('#dlg-title').focus({ preventScroll: true });
-}
-function closeDlg() {
-  if (!dlg.open) return; dlg.classList.add('closing');
-  const ms = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160;
-  setTimeout(() => { dlg.classList.remove('closing'); if (dlg.open) dlg.close(); }, ms);
-}
-const requestClose = () => location.hash.startsWith('#tool-') ? history.back() : closeDlg();
-$('#dlg-close').addEventListener('click', requestClose);
-dlg.addEventListener('cancel', e => { e.preventDefault(); requestClose(); });
-dlg.addEventListener('click', e => { if (e.target === dlg) requestClose(); });
-dlg.addEventListener('close', () => { revokeAll(); runCleanups(); $('#dlg-body').replaceChildren(); document.body.append($('#toasts')); render(false); if (lastFocus && lastFocus.isConnected) lastFocus.focus(); });
-addEventListener('popstate', () => { const m = location.hash.match(/^#tool-(.+)$/); if (m && byId(m[1])) openTool(m[1], null, true); else closeDlg(); });
-
-/* ---------- theme ---------- */
-const themeBtn = $('#theme');
-function paintTheme() { const d = document.documentElement.dataset.theme === 'dark'; const label = d ? 'Switch to light mode' : 'Switch to dark mode'; themeBtn.textContent = d ? '☀' : '☾'; themeBtn.setAttribute('aria-label', label); }
-themeBtn.addEventListener('click', () => { const n = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = n; try { localStorage.setItem('tbp:theme', n); } catch { /* ignore */ } paintTheme(); });
-if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = 'dark';
-paintTheme(); render(false);
-{ const m = location.hash.match(/^#tool-(.+)$/); if (m && byId(m[1])) { history.replaceState(null, '', location.pathname + location.search); openTool(m[1], null); } }
-
-/* ---------- premium navigation + reveal ---------- */
-const menuToggle = document.getElementById('menu-toggle');
-const mainNav = document.getElementById('main-nav');
-if (menuToggle && mainNav) {
-  const closeMenu = () => { mainNav.classList.remove('open'); menuToggle.setAttribute('aria-expanded','false'); menuToggle.setAttribute('aria-label','Open navigation'); };
-  menuToggle.addEventListener('click', () => {
-    const open = mainNav.classList.toggle('open');
-    menuToggle.setAttribute('aria-expanded', String(open));
-    menuToggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-  });
-  mainNav.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
-  document.addEventListener('click', e => {
-    if (mainNav.classList.contains('open') && !mainNav.contains(e.target) && e.target !== menuToggle) closeMenu();
-  });
-  window.addEventListener('resize', () => { if (innerWidth > 760) closeMenu(); });
-}
-const revealTargets = document.querySelectorAll('.about-card,.panel,.legal article,.ad,.foot');
-if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  const io = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.animate(
-          [{opacity:0, transform:'translateY(16px)'},{opacity:1, transform:'translateY(0)'}],
-          {duration:520, easing:'cubic-bezier(.2,.75,.2,1)', fill:'both'}
-        );
-        io.unobserve(entry.target);
+      if (mode.value === 'e') {
+        const b = new TextEncoder().encode(t.value); let s = '';
+        for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+        o.value = btoa(s);
+      } else {
+        const bin = atob(t.value.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/'));
+        const u = Uint8Array.from(bin, c => c.charCodeAt(0));
+        try { o.value = new TextDecoder('utf-8', { fatal: true }).decode(u); } catch { m.set('The decoded data is not valid UTF-8 text.'); toast('Decoding failed', 'err'); return; }
       }
-    });
-  }, {threshold:.08});
-  revealTargets.forEach(el => io.observe(el));
+      m.set('Done.', true);
+    } catch { m.set(mode.value === 'd' ? 'This is not valid Base64.' : 'Something went wrong. Please try again.'); toast('Conversion failed', 'err'); }
+  };
+  el.append(field('Mode', mode), field('Input', t), btn('Convert', run, 'pri'), m, field('Output', o), h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-result.txt')));
 }
+function urlTool(el) {
+  const t = area({ rows: 5 }), o = area({ rows: 5, readonly: true }), mode = sel([['ec', 'Encode (component)'], ['eu', 'Encode (full URL)'], ['d', 'Decode']]), m = msgEl();
+  const run = () => {
+    m.set(''); o.value = ''; if (!t.value) { m.set('Please enter some input.'); return; }
+    try { o.value = mode.value === 'ec' ? encodeURIComponent(t.value) : mode.value === 'eu' ? encodeURI(t.value) : decodeURIComponent(t.value); m.set('Done.', true); }
+    catch { m.set('This input cannot be processed. It may contain invalid percent-encoding.'); toast('Conversion failed', 'err'); }
+  };
+  el.append(field('Mode', mode), field('Input', t), btn('Convert', run, 'pri'), m, field('Output', o), h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-result.txt')));
+}
+function uuidV4() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
+  const x = [...b].map(v => v.toString(16).padStart(2, '0')).join('');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+function uuidTool(el) {
+  if (!cryptoOk()) { el.append(h('p', { class: 'msg' }, 'Your browser does not support secure random numbers.')); return; }
+  const c = num({ value: '1', min: '1', max: '100', step: '1' }), o = area({ rows: 8, readonly: true }), m = msgEl();
+  const run = () => { const n = val(c); if (!Number.isInteger(n) || n < 1 || n > 100) { m.set('Enter a whole number from 1 to 100.'); return; } m.set(''); o.value = Array.from({ length: n }, uuidV4).join('\n'); };
+  el.append(field('How many UUIDs (1-100)', c), btn('Generate', run, 'pri'), m, field('UUID v4', o), h('div', { class: 'acts' }, copyBtn(() => o.value), dlBtn(() => o.value, 'toolbox-pro-uuids.txt')));
+  run();
+}
+function hashTool(el) {
+  const t = area({ rows: 5 }), a = sel(['SHA-256', 'SHA-384', 'SHA-512']), o = area({ rows: 4, readonly: true }), m = msgEl();
+  if (!(window.crypto && crypto.subtle)) { el.append(h('p', { class: 'msg' }, 'Your browser does not support the Web Crypto API. Open this site over HTTPS or localhost.')); return; }
+  const run = async () => {
+    try { const d = await crypto.subtle.digest(a.value, new TextEncoder().encode(t.value)); o.va
